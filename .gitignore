@@ -1,0 +1,28 @@
+# environments and downloaded models
+.venv/
+node_modules/
+models/
+.env
+
+# user data and generated output (recordings, samples, projects, library, uploads, job files)
+userdata/
+library/
+uploads/
+.jobs/
+*.pcm
+
+# generated listening packs (large audio); keep samples/README.md
+samples/*
+!samples/README.md
+
+# caches, scratch, logs
+__pycache__/
+*.pyc
+.pytest_cache/
+.sandbox/
+*.log
+cld.logs
+
+# OS files
+.DS_Store
+Thumbs.db

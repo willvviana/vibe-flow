@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Create Music – Vibe Flow AI Music Generator</title>
+  <meta name="description" content="Generate original instrumental music from a text prompt or your own audio, locally on your computer with Vibe Flow.">
+  <link rel="canonical" href="https://www.vibeflow.app/create.html">
+  <meta name="theme-color" content="#0b0b14">
+  <meta name="color-scheme" content="dark">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Vibe Flow">
+  <meta property="og:title" content="Vibe Flow – Turn a sentence into a complete song">
+  <meta property="og:description" content="Describe the music you want and Vibe Flow generates it locally with open-source AI. Free and private.">
+  <meta property="og:url" content="https://www.vibeflow.app/create.html">
+  <meta property="og:image" content="https://www.vibeflow.app/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Vibe Flow – AI music generator">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Vibe Flow – Turn a sentence into a complete song">
+  <meta name="twitter:description" content="Text to music and audio continuation that run on your own computer. WAV, FLAC, MP3.">
+  <meta name="twitter:image" content="https://www.vibeflow.app/og-image.png">
+
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="manifest" href="site.webmanifest">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Inter:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="styles.css">
+
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8b5cf6"/><stop offset="1" stop-color="#22d3ee"/></linearGradient></defs><symbol id="logo" viewBox="0 0 32 32"><rect width="32" height="32" rx="9" fill="url(#lg)"/><g fill="#0b0b14"><rect x="6" y="13" width="3" height="6" rx="1.5"/><rect x="11" y="8" width="3" height="16" rx="1.5"/><rect x="16" y="11" width="3" height="10" rx="1.5"/><rect x="21" y="6" width="3" height="20" rx="1.5"/></g></symbol></svg>
+  <a class="skip" href="#main">Skip to content</a>
+
+  <header class="nav" id="top">
+    <div class="wrap nav-in">
+      <a class="brand" href="/" aria-label="Vibe Flow home">
+        <svg width="30" height="30" viewBox="0 0 32 32" aria-hidden="true"><use href="#logo"/></svg>
+        <span>Vibe Flow</span>
+      </a>
+      <nav class="links" id="menu" aria-label="Primary">
+        <a href="create.html">Create</a>
+        <a href="sample.html">Sample</a>
+        <a href="editor.html">Editor</a>
+        <div class="dd">
+          <a class="dd-t" href="/about" aria-haspopup="true">About</a>
+          <ul class="dd-m" aria-label="About sections">
+            <li><a href="/about#how">How it works</a></li>
+            <li><a href="/about#benefits">Benefits</a></li>
+            <li><a href="/about#use-cases">Use cases</a></li>
+            <li><a href="/about#showcase">Showcase</a></li>
+            <li><a href="/about#pricing">Pricing</a></li>
+            <li><a href="/about#faq">FAQ</a></li>
+          </ul>
+        </div>
+        <a class="btn btn-primary menu-cta" aria-current="page" href="create.html">Create music</a>
+      </nav>
+      <a class="btn btn-primary nav-cta" href="create.html">Create music</a>
+      <button class="burger" aria-label="Toggle menu" aria-expanded="false" aria-controls="menu"><span></span><span></span></button>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero">
+      <div class="glow g1"></div><div class="glow g2"></div>
+      <div class="wrap hero-in">
+        <h1>Create <span class="grad">music</span></h1>
+        <p class="lead">Describe a mood, pick genres and instruments, or start from your own audio.</p>
+        <div class="studio" id="studio" aria-label="Music generator">
+          <div class="engine-status" id="engine-status" role="status">Checking local engine…</div>
+          <div class="tabs" role="tablist">
+            <button role="tab" aria-selected="true" data-mode="text">Text to music</button>
+            <button role="tab" aria-selected="false" data-mode="continue">Continue a sample</button>
+            <button role="tab" aria-selected="false" data-mode="melody">Melody guide</button>
+            <button role="tab" aria-selected="false" data-mode="adapt">Adapt a sample</button>
+          </div>
+          <label class="sr" for="prompt">Describe your music</label>
+          <textarea id="prompt" maxlength="500" rows="3" placeholder="A warm, sunny road-trip tune with bright guitars and handclaps"></textarea>
+          <div id="ref-box" class="ref" hidden>
+            <label class="btn btn-ghost">Choose audio file<input type="file" id="ref-file" accept=".wav,.flac,.mp3,.ogg,audio/*" hidden></label>
+            <span id="ref-info" class="muted">WAV, FLAC, MP3 or OGG · up to 25 MB / 10 min</span>
+            <select id="sample-pick" class="ed-sel" aria-label="Saved samples" hidden style="background:var(--bg);border:1px solid var(--line);border-radius:8px;color:var(--text);padding:6px 8px"></select>
+            <select id="rec-pick" class="ed-sel" aria-label="Recordings from the Sample page" hidden style="background:var(--bg);border:1px solid var(--line);border-radius:8px;color:var(--text);padding:6px 8px"></select>
+            <div id="rec-box" class="rec-use" hidden>
+              <div class="rec-ver" role="radiogroup" aria-label="Which version of the recording guides the music">
+                <span class="muted">Use</span>
+                <label><input type="radio" name="recver" value="full" checked> Full recording</label>
+                <label><input type="radio" name="recver" value="instrumental"> Instrumental</label>
+                <label><input type="radio" name="recver" value="voice"> Voice only</label>
+              </div>
+              <p id="rec-note" class="note"></p>
+            </div>
+          </div>
+          <div id="adapt-box" class="adapt" hidden>
+            <label class="adh">
+              <span class="adh-h"><span>Loose</span><output id="adh-out">50%</output><span>Close to sample</span></span>
+              <input type="range" id="adherence" min="0" max="100" step="1" value="50" aria-describedby="adh-desc">
+            </label>
+            <p id="adh-desc" class="note"></p>
+            <label>Added layers level <output id="lvl-out">-6 dB</output><input type="range" id="level" min="-24" max="0" step="1" value="-6"></label>
+            <p class="note">Instrumental only. “Music with Vocals” is not available: the engine is instrumental, and the only vocal model tested (ACE-Step) is not integrated. The sample is kept untouched where it is retained; the new layers are generated around it.</p>
+          </div>
+          <fieldset class="grp"><legend>Genre</legend><div class="ms" id="genres" data-placeholder="Select genres"></div></fieldset>
+          <fieldset class="grp"><legend>Instruments</legend><div class="ms" id="instruments" data-placeholder="Select instruments"></div></fieldset>
+          <fieldset class="grp"><legend>Mood</legend><div class="ms" id="moods" data-placeholder="Select mood"></div></fieldset>
+          <div class="fields">
+            <label>Tempo (BPM)<input type="number" id="bpm" min="40" max="220" placeholder="auto"></label>
+            <label>Key<select id="key"><option value="">auto</option></select></label>
+            <label>Time signature<select id="tsig"><option value="">auto</option></select></label>
+            <label id="dur-label">Duration <output id="dur-out">10 s</output><input type="range" id="duration" min="2" max="60" value="10"></label>
+            <label>Format<select id="format"><option value="wav">WAV</option><option value="flac">FLAC</option><option value="mp3">MP3</option></select></label>
+            <label>Seed<input type="number" id="seed" placeholder="random"></label>
+            <label class="chk"><span><input type="checkbox" id="fast"> Fast mode (int8)</span><small>~1.5× faster on CPU, uses more RAM, slightly different sound</small></label>
+          </div>
+          <p class="note">Instrumental only. Genre, instruments, mood, BPM, key and time signature guide the model as text and are followed approximately. Duration, seed and format are exact.</p>
+          <div class="studio-foot">
+            <span class="count"><b id="count">0</b>/500</span>
+            <button type="button" class="btn btn-ghost" id="cancel" hidden>Cancel</button>
+            <button type="button" class="btn btn-primary" id="go">Generate music →</button>
+          </div>
+          <div id="result" aria-live="polite"></div>
+          <details class="lib" id="library-box"><summary>My library <span id="lib-count"></span></summary><div id="library"></div></details>
+          <details class="lib" id="models-box"><summary>Models &amp; hardware</summary><div id="models"></div></details>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <div class="wrap foot-in">
+      <div>
+        <a class="brand" href="/"><svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true"><use href="#logo"/></svg><span>Vibe Flow</span></a>
+        <p class="muted">An AI-powered music platform to generate, extend and transform music.</p>
+        <p class="muted"><a href="mailto:support@vibeflow.app">support@vibeflow.app</a></p>
+      </div>
+      <nav aria-label="Product"><h4>Product</h4><a href="/about#how">How it works</a><a href="/about#benefits">Benefits</a><a href="/about#pricing">Pricing</a><a href="/about#faq">FAQ</a></nav>
+      <nav aria-label="Legal"><h4>Legal</h4><a href="https://www.vibeflow.app/privacy-policy">Privacy Policy</a><a href="https://www.vibeflow.app/terms-of-service">Terms of Service</a><a href="https://www.vibeflow.app/refund-policy">Refund Policy</a></nav>
+    </div>
+    <div class="wrap legal"><span>© <span id="yr">2025</span> Vibe Flow. All rights reserved.</span></div>
+  </footer>
+
+  <script src="script.js" defer></script>
+  <script src="studio.js" defer></script>
+</body>
+</html>

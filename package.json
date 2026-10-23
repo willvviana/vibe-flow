@@ -1,0 +1,16 @@
+{
+  "name": "vibe-flow",
+  "version": "1.0.0",
+  "private": true,
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "setup": "uv python install 3.11 && uv venv --python 3.11 .venv && uv pip install --python .venv/Scripts/python.exe -r requirements.txt",
+    "install-model": "node tools/py.js -m engine.cli install musicgen-small",
+    "install-sampling": "node tools/py.js -m engine.cli sample-install",
+    "verify-model": "node tools/py.js -m engine.cli verify musicgen-small",
+    "start": "node server.js",
+    "test": "node tools/py.js -m pytest tests -q && node --test tests/editor-core.test.js tests/editor-dsp.test.js tests/server.test.js tests/sample.test.js",
+    "test:fast": "node tools/py.js -m pytest tests -q -k \"not smoke\" && node --test tests/editor-core.test.js tests/editor-dsp.test.js",
+    "bench": "node tools/py.js tools/bench.py"
+  }
+}

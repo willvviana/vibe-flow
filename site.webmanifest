@@ -1,0 +1,12 @@
+{
+  "name": "Vibe Flow",
+  "short_name": "Vibe Flow",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0b0b14",
+  "theme_color": "#0b0b14",
+  "icons": [
+    {"src": "favicon.svg", "sizes": "any", "type": "image/svg+xml"},
+    {"src": "apple-touch-icon.png", "sizes": "180x180", "type": "image/png"}
+  ]
+}

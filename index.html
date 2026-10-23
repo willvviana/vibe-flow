@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vibe Flow – Local AI Music Generator: Text to Music on Your Computer</title>
+  <meta name="description" content="Vibe Flow generates original instrumental music from a text prompt or your own audio, using open-source AI that runs on your computer. Free, private, WAV/FLAC/MP3 export.">
+  <link rel="canonical" href="https://www.vibeflow.app/">
+  <meta name="theme-color" content="#0b0b14">
+  <meta name="color-scheme" content="dark">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Vibe Flow">
+  <meta property="og:title" content="Vibe Flow – Turn a sentence into a complete song">
+  <meta property="og:description" content="Describe the music you want and Vibe Flow generates it locally with open-source AI. Free and private.">
+  <meta property="og:url" content="https://www.vibeflow.app/">
+  <meta property="og:image" content="https://www.vibeflow.app/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Vibe Flow – AI music generator">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Vibe Flow – Turn a sentence into a complete song">
+  <meta name="twitter:description" content="Text to music and audio continuation that run on your own computer. WAV, FLAC, MP3.">
+  <meta name="twitter:image" content="https://www.vibeflow.app/og-image.png">
+
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="manifest" href="site.webmanifest">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Inter:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="styles.css">
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {"@type": "Organization", "name": "Vibe Flow", "url": "https://www.vibeflow.app/", "logo": "https://www.vibeflow.app/favicon.svg", "email": "support@vibeflow.app"},
+      {"@type": "WebSite", "name": "Vibe Flow", "url": "https://www.vibeflow.app/"},
+      {"@type": "SoftwareApplication", "name": "Vibe Flow", "applicationCategory": "MultimediaApplication", "operatingSystem": "Windows, macOS, Linux",
+       "description": "Local AI music generator that creates instrumental music from text prompts or reference audio using open-source models.",
+       "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}},
+      {"@type": "FAQPage", "mainEntity": [
+        {"@type": "Question", "name": "How does text to music work?", "acceptedAnswer": {"@type": "Answer", "text": "Vibe Flow turns your genre, mood, instrument and tempo choices into a prompt for MusicGen, an open-source model that runs on your own computer, and returns an instrumental track."}},
+        {"@type": "Question", "name": "Can I turn my own lyrics into a song?", "acceptedAnswer": {"@type": "Answer", "text": "Not yet. The installed local models make instrumental music only; vocal models need a powerful NVIDIA GPU."}},
+        {"@type": "Question", "name": "What export formats are available?", "acceptedAnswer": {"@type": "Answer", "text": "Tracks are saved as WAV, and you can export FLAC or MP3 copies."}},
+        {"@type": "Question", "name": "Can I use the music commercially?", "acceptedAnswer": {"@type": "Answer", "text": "Not with the current models: MusicGen weights are licensed CC-BY-NC 4.0, which is non-commercial."}},
+        {"@type": "Question", "name": "Is it free?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. It runs locally with no credits, accounts or cloud calls."}}
+      ]}
+    ]
+  }
+  </script>
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8b5cf6"/><stop offset="1" stop-color="#22d3ee"/></linearGradient></defs><symbol id="logo" viewBox="0 0 32 32"><rect width="32" height="32" rx="9" fill="url(#lg)"/><g fill="#0b0b14"><rect x="6" y="13" width="3" height="6" rx="1.5"/><rect x="11" y="8" width="3" height="16" rx="1.5"/><rect x="16" y="11" width="3" height="10" rx="1.5"/><rect x="21" y="6" width="3" height="20" rx="1.5"/></g></symbol></svg>
+  <a class="skip" href="#main">Skip to content</a>
+
+  <header class="nav" id="top">
+    <div class="wrap nav-in">
+      <a class="brand" href="#top" aria-label="Vibe Flow home">
+        <svg width="30" height="30" viewBox="0 0 32 32" aria-hidden="true"><use href="#logo"/></svg>
+        <span>Vibe Flow</span>
+      </a>
+      <nav class="links" id="menu" aria-label="Primary">
+        <a href="create.html">Create</a>
+        <a href="sample.html">Sample</a>
+        <a href="editor.html">Editor</a>
+        <div class="dd">
+          <a class="dd-t" href="/about" aria-haspopup="true">About</a>
+          <ul class="dd-m" aria-label="About sections">
+            <li><a href="/about#how">How it works</a></li>
+            <li><a href="/about#benefits">Benefits</a></li>
+            <li><a href="/about#use-cases">Use cases</a></li>
+            <li><a href="/about#showcase">Showcase</a></li>
+            <li><a href="/about#pricing">Pricing</a></li>
+            <li><a href="/about#faq">FAQ</a></li>
+          </ul>
+        </div>
+        <a class="btn btn-primary menu-cta" href="create.html">Create music</a>
+      </nav>
+      <a class="btn btn-primary nav-cta" href="create.html">Create music</a>
+      <button class="burger" aria-label="Toggle menu" aria-expanded="false" aria-controls="menu"><span></span><span></span></button>
+    </div>
+  </header>
+
+  <main id="main">
+    <!-- HERO -->
+    <section class="hero">
+      <div class="glow g1"></div><div class="glow g2"></div>
+      <div class="wrap hero-in">
+        <p class="pill"><span class="dot"></span> AI music generator · free to start</p>
+        <h1>Turn a sentence into <span class="grad">original music</span>.</h1>
+        <p class="lead">Describe a mood, pick genres and instruments, or start from your own audio. Vibe Flow generates an instrumental track with open-source AI running on your own computer.</p>
+        <h2 class="hero-sub">Ready to hear your first song?</h2>
+        <p class="lead">Start with free credits. No credit card needed.</p>
+        <div class="cta-row">
+          <a class="btn btn-primary btn-lg" href="create.html">Create music</a>
+          <a class="btn btn-ghost btn-lg" href="/about#pricing">View pricing</a>
+        </div>
+        <p class="fine">Free · Private · Runs locally · WAV, FLAC &amp; MP3 export</p>
+      </div>
+    </section>
+
+    <!-- TRUST STRIP -->
+    <section class="strip" aria-label="Highlights">
+      <div class="wrap strip-in">
+        <div><b>Local</b><span>runs on your computer</span></div>
+        <div><b>Instrumental</b><span>text &amp; audio-guided</span></div>
+        <div><b>WAV · FLAC · MP3</b><span>export formats</span></div>
+        <div><b>Free</b><span>no credits or accounts</span></div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="foot">
+    <div class="wrap foot-in">
+      <div>
+        <a class="brand" href="#top"><svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true"><use href="#logo"/></svg><span>Vibe Flow</span></a>
+        <p class="muted">An AI-powered music platform to generate, extend and transform music.</p>
+        <p class="muted"><a href="mailto:support@vibeflow.app">support@vibeflow.app</a></p>
+      </div>
+      <nav aria-label="Product"><h4>Product</h4><a href="/about#how">How it works</a><a href="/about#benefits">Benefits</a><a href="/about#pricing">Pricing</a><a href="/about#faq">FAQ</a></nav>
+      <nav aria-label="Legal"><h4>Legal</h4><a href="https://www.vibeflow.app/privacy-policy">Privacy Policy</a><a href="https://www.vibeflow.app/terms-of-service">Terms of Service</a><a href="https://www.vibeflow.app/refund-policy">Refund Policy</a></nav>
+    </div>
+    <div class="wrap legal"><span>© <span id="yr">2025</span> Vibe Flow. All rights reserved.</span></div>
+  </footer>
+
+  <script src="script.js" defer></script>
+</body>
+</html>

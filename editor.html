@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Editor – Vibe Flow Multi-Track Audio Editor</title>
+  <meta name="description" content="Edit, layer, mix and export multiple audio tracks in your browser with Vibe Flow's multi-track editor. Everything runs locally.">
+  <link rel="canonical" href="https://www.vibeflow.app/editor.html">
+  <meta name="theme-color" content="#0b0b14">
+  <meta name="color-scheme" content="dark">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="manifest" href="site.webmanifest">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Inter:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="editor.css">
+</head>
+<body class="ed-page">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8b5cf6"/><stop offset="1" stop-color="#22d3ee"/></linearGradient></defs><symbol id="logo" viewBox="0 0 32 32"><rect width="32" height="32" rx="9" fill="url(#lg)"/><g fill="#0b0b14"><rect x="6" y="13" width="3" height="6" rx="1.5"/><rect x="11" y="8" width="3" height="16" rx="1.5"/><rect x="16" y="11" width="3" height="10" rx="1.5"/><rect x="21" y="6" width="3" height="20" rx="1.5"/></g></symbol></svg>
+  <a class="skip" href="#ed">Skip to editor</a>
+
+  <header class="nav" id="top">
+    <div class="wrap nav-in">
+      <a class="brand" href="/" aria-label="Vibe Flow home"><svg width="30" height="30" viewBox="0 0 32 32" aria-hidden="true"><use href="#logo"/></svg><span>Vibe Flow</span></a>
+      <nav class="links" id="menu" aria-label="Primary">
+        <a href="create.html">Create</a>
+        <a href="sample.html">Sample</a>
+        <a href="editor.html" aria-current="page">Editor</a>
+        <div class="dd">
+          <a class="dd-t" href="/about" aria-haspopup="true">About</a>
+          <ul class="dd-m" aria-label="About sections">
+            <li><a href="/about#how">How it works</a></li><li><a href="/about#benefits">Benefits</a></li><li><a href="/about#use-cases">Use cases</a></li>
+            <li><a href="/about#showcase">Showcase</a></li><li><a href="/about#pricing">Pricing</a></li><li><a href="/about#faq">FAQ</a></li>
+          </ul>
+        </div>
+        <a class="btn btn-primary menu-cta" href="create.html">Create music</a>
+      </nav>
+      <a class="btn btn-primary nav-cta" href="create.html">Create music</a>
+      <button class="burger" aria-label="Toggle menu" aria-expanded="false" aria-controls="menu"><span></span><span></span></button>
+    </div>
+  </header>
+
+  <main id="ed" class="ed">
+    <!-- TOP: project, transport, time, export -->
+    <section class="ed-top" aria-label="Playback">
+      <div class="ed-top-l">
+        <input id="proj-name" class="ed-name" aria-label="Project name" value="Untitled project" maxlength="80">
+        <button class="ed-btn" id="btn-projects" title="Open or manage projects">Projects</button>
+        <button class="ed-btn" id="btn-save" title="Save project (Ctrl+S)">Save</button>
+        <span id="save-state" class="ed-muted" role="status"></span>
+      </div>
+      <div class="ed-transport">
+        <button class="ed-icon" id="btn-start" title="Go to start (Home)" aria-label="Go to start">⏮</button>
+        <button class="ed-play" id="btn-play" title="Play / Pause (Space)" aria-label="Play">▶</button>
+        <button class="ed-icon" id="btn-end" title="Go to end (End)" aria-label="Go to end">⏭</button>
+        <div class="ed-time"><b id="time-cur">0:00.0</b> / <span id="time-tot">0:00.0</span></div>
+        <canvas id="meter" class="ed-meter" width="120" height="10" aria-label="Output level"></canvas>
+      </div>
+      <div class="ed-top-r">
+        <button class="ed-btn" id="btn-settings" title="Keyboard shortcuts and editor settings">Settings</button>
+        <button class="ed-btn" id="btn-send" title="Render the mix and open it in Create as a sample">Send to Create</button>
+        <button class="btn btn-primary ed-export" id="btn-export" title="Export (Ctrl+E)">Export</button>
+      </div>
+    </section>
+
+    <!-- MIDDLE: library (left) and properties (right) -->
+    <section class="ed-mid" id="ed-mid">
+      <aside class="ed-panel" id="left" aria-label="Audio library">
+        <div class="ed-tabs" role="tablist" id="left-tabs">
+          <button role="tab" data-t="import" aria-selected="false">Import</button>
+          <button role="tab" data-t="audio" aria-selected="true">Audio</button>
+          <button role="tab" data-t="voice" aria-selected="false">Voice</button>
+          <button role="tab" data-t="effects" aria-selected="false">Effects</button>
+          <button role="tab" data-t="filters" aria-selected="false">Filters</button>
+        </div>
+        <div class="ed-body" id="left-body"></div>
+      </aside>
+      <div class="ed-split v" id="split-v" role="separator" aria-orientation="vertical" aria-label="Resize library" tabindex="0"></div>
+      <aside class="ed-panel" id="props" aria-label="Properties">
+        <div class="ed-tabs" role="tablist" id="props-tabs">
+          <button role="tab" data-t="basic" aria-selected="true">Basic</button>
+          <button role="tab" data-t="voice" aria-selected="false">Voice Changer</button>
+          <button role="tab" data-t="speed" aria-selected="false">Speed</button>
+          <button role="tab" data-t="eq" aria-selected="false">EQ &amp; Dynamics</button>
+          <button role="tab" data-t="space" aria-selected="false">Space</button>
+          <button role="tab" data-t="filter" aria-selected="false">Filter</button>
+          <button role="tab" data-t="track" aria-selected="false">Track</button>
+        </div>
+        <div class="ed-body" id="props-body"></div>
+      </aside>
+    </section>
+    <div class="ed-split h" id="split-h" role="separator" aria-orientation="horizontal" aria-label="Resize timeline" tabindex="0"></div>
+
+    <!-- BOTTOM: toolbar + timeline -->
+    <section class="ed-bottom" id="ed-bottom">
+      <div class="ed-toolbar" id="toolbar" role="toolbar" aria-label="Editing tools"></div>
+      <div class="ed-tl" id="tl">
+        <div class="ed-heads" id="heads">
+          <div class="ed-corner" id="corner">Tracks</div>
+          <div id="head-list"></div>
+          <button class="ed-addtrack" id="btn-addtrack">+ Track</button>
+        </div>
+        <div class="ed-scroll" id="scroll">
+          <div class="ed-canvas" id="canvas">
+            <div class="ed-ruler" id="ruler"><canvas id="ruler-c"></canvas><div class="ed-region" id="region" hidden></div><div class="ed-ph-h" id="ph-handle"></div></div>
+            <div class="ed-lanes" id="lanes"></div>
+            <div class="ed-ph" id="ph"></div>
+            <div class="ed-snapline" id="snapline" hidden></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div class="ed-modal" id="modal" hidden><div class="ed-dialog" id="dialog" role="dialog" aria-modal="true"></div></div>
+  <div class="ed-toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+  <script src="vendor/lame.min.js" defer></script>
+  <script src="script.js" defer></script>
+  <script src="editor/core.js" defer></script>
+  <script src="editor/dsp.js" defer></script>
+  <script src="editor/engine.js" defer></script>
+  <script src="editor/storage.js" defer></script>
+  <script src="editor/ui.js" defer></script>
+  <script src="editor/ui-panels.js" defer></script>
+  <script src="editor/ui-export.js" defer></script>
+</body>
+</html>

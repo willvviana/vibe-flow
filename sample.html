@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sample – Vibe Flow Audio Capture &amp; Stem Separation</title>
+  <meta name="description" content="Record the audio playing on your computer, transcribe it live, split it into instrumental and voice, analyse genre, mood, BPM and key, and use it as a sample in Vibe Flow. Everything runs locally.">
+  <link rel="canonical" href="https://www.vibeflow.app/sample.html">
+  <meta name="theme-color" content="#0b0b14">
+  <meta name="color-scheme" content="dark">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="manifest" href="site.webmanifest">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Inter:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="sample.css">
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8b5cf6"/><stop offset="1" stop-color="#22d3ee"/></linearGradient></defs><symbol id="logo" viewBox="0 0 32 32"><rect width="32" height="32" rx="9" fill="url(#lg)"/><g fill="#0b0b14"><rect x="6" y="13" width="3" height="6" rx="1.5"/><rect x="11" y="8" width="3" height="16" rx="1.5"/><rect x="16" y="11" width="3" height="10" rx="1.5"/><rect x="21" y="6" width="3" height="20" rx="1.5"/></g></symbol></svg>
+  <a class="skip" href="#main">Skip to content</a>
+
+  <header class="nav" id="top">
+    <div class="wrap nav-in">
+      <a class="brand" href="/" aria-label="Vibe Flow home"><svg width="30" height="30" viewBox="0 0 32 32" aria-hidden="true"><use href="#logo"/></svg><span>Vibe Flow</span></a>
+      <nav class="links" id="menu" aria-label="Primary">
+        <a href="create.html">Create</a>
+        <a href="sample.html" aria-current="page">Sample</a>
+        <a href="editor.html">Editor</a>
+        <div class="dd">
+          <a class="dd-t" href="/about" aria-haspopup="true">About</a>
+          <ul class="dd-m" aria-label="About sections">
+            <li><a href="/about#how">How it works</a></li><li><a href="/about#benefits">Benefits</a></li><li><a href="/about#use-cases">Use cases</a></li>
+            <li><a href="/about#showcase">Showcase</a></li><li><a href="/about#pricing">Pricing</a></li><li><a href="/about#faq">FAQ</a></li>
+          </ul>
+        </div>
+        <a class="btn btn-primary menu-cta" href="create.html">Create music</a>
+      </nav>
+      <a class="btn btn-primary nav-cta" href="create.html">Create music</a>
+      <button class="burger" aria-label="Toggle menu" aria-expanded="false" aria-controls="menu"><span></span><span></span></button>
+    </div>
+  </header>
+
+  <main id="main" class="sp">
+    <div class="wrap">
+      <h1>Sample <span class="grad">anything</span></h1>
+      <p class="lead">Record what is playing on your computer, read it as it happens, split it into instrumental and voice, and use any version to guide new music.</p>
+
+      <section class="spc rec" aria-labelledby="rec-h">
+        <div class="rec-head">
+          <h2 id="rec-h">Record</h2>
+          <div class="rec-ind" id="rec-ind" role="status" aria-live="polite"><i class="rec-dot" aria-hidden="true"></i><span id="rec-state">Not recording</span></div>
+        </div>
+
+        <div class="rec-src">
+          <label for="src">Source</label>
+          <select id="src" class="sel">
+            <option value="system">System audio: everything you hear</option>
+            <option value="display">Screen or tab share with audio (browser)</option>
+            <option value="mic">Microphone</option>
+          </select>
+          <p class="note" id="src-note"></p>
+        </div>
+        <div class="alert" id="cap-alert" role="alert" hidden></div>
+
+        <div class="rec-ctl">
+          <button class="btn btn-primary" id="btn-start">● Start recording</button>
+          <button class="btn btn-ghost" id="btn-pause" disabled>❚❚ Pause</button>
+          <button class="btn btn-ghost" id="btn-resume" disabled hidden>▶ Resume</button>
+          <button class="btn btn-ghost" id="btn-stop" disabled>■ Stop</button>
+          <span class="rec-time" id="rec-time" aria-label="Recording duration">0:00</span>
+        </div>
+
+        <div class="meters" aria-label="Input level">
+          <div class="meter"><span>L</span><div class="spbar"><i id="m-l"></i><b id="m-lp"></b></div></div>
+          <div class="meter"><span>R</span><div class="spbar"><i id="m-r"></i><b id="m-rp"></b></div></div>
+          <span class="clip" id="clip" hidden>Clipping at the source</span>
+          <span class="muted" id="m-db">−∞ dB</span>
+        </div>
+        <canvas id="live-wave" class="wave" height="96" aria-label="Live waveform"></canvas>
+        <p class="note">Capture is lossless 32-bit float at the device rate (usually 48 kHz). Nothing is recorded until you press Start (browser sources also ask what to share), the red indicator shows while it records, and nothing leaves this computer.</p>
+
+        <div class="proc" id="proc" hidden>
+          <div class="proc-h"><strong id="proc-title">Processing</strong><span id="proc-pct" class="muted"></span></div>
+          <div class="bar-prog" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-labelledby="proc-title"><i id="proc-bar"></i></div>
+          <p class="note" id="proc-note"></p>
+        </div>
+      </section>
+
+      <section class="spc tr" aria-labelledby="tr-h">
+        <div class="rec-head">
+          <h2 id="tr-h">Live transcription</h2>
+          <div class="tr-meta"><span class="chip" id="tr-lang" hidden></span><span class="muted" id="tr-state">Waiting for audio</span></div>
+        </div>
+        <textarea id="tr-box" class="tr-box" rows="9" spellcheck="false" readonly aria-label="Transcription" placeholder="Speech and singing will appear here while you record. Language is detected automatically."></textarea>
+        <div class="row">
+          <button class="btn btn-ghost sm" id="tr-edit">Edit</button>
+          <button class="btn btn-ghost sm" id="tr-copy">Copy</button>
+          <button class="btn btn-ghost sm" id="tr-txt">Download .txt</button>
+          <button class="btn btn-ghost sm" id="tr-srt">Download .srt</button>
+          <span class="muted" id="tr-note"></span>
+        </div>
+        <p class="note">Transcribed on this computer with Whisper (small). Timestamps are included; speakers are not distinguished (no speaker-identification model is installed). Accuracy drops on loud music; the final pass runs on the isolated voice.</p>
+      </section>
+
+      <section aria-labelledby="lib-h">
+        <div class="rec-head"><h2 id="lib-h">Recordings library</h2><span class="muted" id="lib-count"></span></div>
+        <div id="lib" class="lib"><p class="muted">Loading…</p></div>
+      </section>
+    </div>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+  <footer class="foot">
+    <div class="wrap foot-in">
+      <div>
+        <a class="brand" href="/"><svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true"><use href="#logo"/></svg><span>Vibe Flow</span></a>
+        <p class="muted">An AI-powered music platform to generate, extend and transform music.</p>
+        <p class="muted"><a href="mailto:support@vibeflow.app">support@vibeflow.app</a></p>
+      </div>
+      <nav aria-label="Product"><h4>Product</h4><a href="/about#how">How it works</a><a href="/about#benefits">Benefits</a><a href="/about#pricing">Pricing</a><a href="/about#faq">FAQ</a></nav>
+      <nav aria-label="Legal"><h4>Legal</h4><a href="https://www.vibeflow.app/privacy-policy">Privacy Policy</a><a href="https://www.vibeflow.app/terms-of-service">Terms of Service</a><a href="https://www.vibeflow.app/refund-policy">Refund Policy</a></nav>
+    </div>
+    <div class="wrap legal"><span>© <span id="yr">2025</span> Vibe Flow. All rights reserved.</span></div>
+  </footer>
+
+  <script src="script.js" defer></script>
+  <script src="sample/app.js" defer></script>
+</body>
+</html>

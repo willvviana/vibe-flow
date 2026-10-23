@@ -1,0 +1,35 @@
+# Vibe Flow Sample page
+
+`/sample.html` (header link **Sample**): record the audio playing on your computer, read it live, split it into instrumental and voice, tag it, keep it, and use any version as the reference on **Create**. Everything runs on this computer; nothing is uploaded.
+
+## Flow
+1. **Record.** Source = **System audio** (default on Windows: everything the computer plays), *Screen or tab share with audio* (browser), or *Microphone*. A red **Recording** indicator, a `● REC` tab title, a live waveform, a timer and L/R level meters show the state; Pause/Resume/Stop. Closing the share dialog or pressing the browser's "Stop sharing" ends the recording and keeps what was captured.
+2. **Capture path, system audio.** A small server-side Python process (`engine/loopback.py`, PyAudioWPatch / WASAPI loopback) records the default playback device as float32 stereo straight into the recording file; silence is written when the device is idle so the timeline stays real-time; Pause/Resume/Stop are commands to that process, and the page polls its levels and waveform every 150 ms. A *warm* capture process (device open, nothing read) is prepared when the page opens and after each recording, so Start begins recording within milliseconds (about 0.3 s measured end to end including the HTTP round trip). Capture exists only between Start and Stop (and ends by itself 90 s after the page stops polling). The browser paths below are the fallback. **Browser capture path.** `getDisplayMedia`/`getUserMedia` (echo cancellation, noise suppression and auto-gain **off**) -> AudioWorklet copies the stereo signal untouched as 32-bit float -> ~1 s chunks POSTed to the server (`POST /api/recordings/:id/pcm`), which appends them to a raw file. On Stop the file becomes `full.wav` (WAV float32, bit-exact with what was captured; verified by test). A capture that is interrupted (tab closed, crash, no data for 90 s) is finalised automatically on the server and processed.
+3. **Live transcription.** The server feeds the growing recording to a warm Whisper worker in windows of <= 28 s and returns timestamped segments, shown in the transcript box (language auto-detected). Editable after recording, copyable, downloadable as `.txt` or `.srt`.
+4. **Processing** (automatic after Stop, one recording at a time, with progress/ETA): Demucs stems -> CLAP tagging + tempo/key -> final Whisper pass over the *isolated voice* (replaces the live transcript when vocals are detected).
+5. **Library** (`userdata/recordings/<id>/`): name/date/duration, three players with waveforms (Full, Instrumental, Voice), A/B "Compare" buttons that switch version at the same playback position, download each version, rename, delete, reprocess, editable tags/BPM/key, saved transcript. Survives refresh and restart.
+6. **Use as sample.** Each version has a button; it opens `create.html?rec=<id>&v=<version>`: the Adapt-a-sample tab opens with that version loaded, a Full / Instrumental / Voice-only selector, and genre, instruments, mood, BPM and key filled from the (edited) tags. Changing the version keeps whatever the user has since edited. The Create page also has a "Use a recording..." dropdown.
+
+## Models (all local, installed with `npm run install-sampling`; about 1.1 GB in `models/`)
+| Job | Model | Notes |
+|---|---|---|
+| Stems | Demucs **htdemucs** 4.0.1 (Meta, MIT) | processed in 40 s blocks with 3 s cross-faded overlaps (bounded memory, progress), shifts=1; CUDA if PyTorch sees one, else CPU |
+| Transcription | faster-whisper **small** (int8, CPU) | language detection per recording; no speaker labels |
+| Tags | LAION **CLAP** htsat-unfused (zero-shot) | genre, subgenre, instruments (from the instrumental stem), mood |
+| Tempo / key | the classical estimators in `engine/sample_analysis.py` | |
+
+## Measured on this machine (Ryzen 7 3700X, CPU only; 36 s sung clip)
+Stems 16.6 s (about 0.45x real time), tagging ~3 s, final transcript ~5 s. The two stems add back to the original with a residual of -37 dB relative to the original. Live transcription lags the audio by roughly 10-20 s on this CPU.
+
+## Limitations (stated plainly)
+- **System audio without a share is Windows-only** (WASAPI loopback of the *default* playback device; other output devices are not captured unless they are the default when you press Start; a device change mid-recording is not followed). On macOS/Linux the option is shown as unavailable and the browser tab/screen share or a virtual loopback device (BlackHole / PulseAudio monitor chosen as the Microphone) must be used. Protected (DRM) streams may be silent. Browser share needs Chrome/Edge; Firefox/Safari are untested.
+- **Separation is not perfect.** Demucs leaves faint vocal remnants in the instrumental and some drum/hi-hat bleed in the voice. "Voice" is the model's vocal stem, not studio acapella. Not compared against other separators; no listening panel was run.
+- **No speaker identification** (no diarization model installed; the common one is gated). Segments carry timestamps only. Whisper-small is less accurate than larger models, especially on loud music or non-English singing; the final pass on the voice stem is better than the live text.
+- **Tags are relative rankings** (a softmax among the candidate labels), not calibrated probabilities. The candidate vocabulary is fixed (about 40 genres, 55 subgenres, 36 instruments, 28 moods); the user can add or remove tags. Tempo/key confidence is low on non-steady music (the sung test clip scored tempo confidence 7%). The instrument tags are guesses (the sung ballad was tagged "clarinet", "sitar").
+- **Create uses the voice stem for rhythm, key and tempo only**: the generator is instrumental. References longer than 10 minutes are refused by Create.
+- Capture is 48 kHz stereo float; mono sources are duplicated to both channels. The browser cannot prevent clipping at the *source*; the page only reports it (clip indicator).
+- Long recordings are processed in the background (extrapolated from the 0.45x measurement, not measured: a 1 h recording would need roughly 30 minutes on this CPU). Recording is capped at 6 hours.
+- Tested for real: system audio capture (the sung clip was played through the speakers and captured, paused, stopped, separated, transcribed). Not tested: the browser's "Share system audio" dialog (a real `MediaStream` was fed through the same code), a real microphone, other audio devices, Firefox/Safari.
+
+## Tests
+`tests/sample.test.js` (real HTTP server + real models; the system-capture test plays a sound through the speakers and is opt-in: `VIBEFLOW_TEST_LOOPBACK=1`): streams a 30 s sung clip as PCM, checks the live transcript, stems, bit-exact original, vocal detection and language, transcript text, tags, tempo/key, rename/edit, "use as sample" for all three versions, and rejection paths. Browser checks (done by hand through the real UI): capture from a `MediaStream`, indicator/meters/waveform, pause state, stop and progress, library, players, A/B switching, seeking, rename, tag edits, hand-off to Create.

@@ -1,0 +1,24 @@
+# Local engine dependencies (CPU build of PyTorch; see engine/README.md for GPU notes)
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.5.1
+transformers==4.46.3
+numpy==1.26.4
+scipy==1.13.1
+soundfile==0.12.1
+huggingface_hub==0.26.5
+safetensors==0.4.5
+psutil==6.1.0
+pytest==8.3.4
+demucs==4.0.1
+dora-search==0.1.13
+treetable==0.2.6
+omegaconf==2.4.0
+submitit==1.5.4
+retrying==1.4.2
+torchaudio==2.5.1
+julius
+einops
+lameenc
+openunmix==1.3.0
+faster-whisper==1.2.1
+pyaudiowpatch==0.2.12.9
