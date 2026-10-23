@@ -9,7 +9,7 @@
     "install-sampling": "node tools/py.js -m engine.cli sample-install",
     "verify-model": "node tools/py.js -m engine.cli verify musicgen-small",
     "start": "node server.js",
-    "test": "node tools/py.js -m pytest tests -q && node --test tests/editor-core.test.js tests/editor-dsp.test.js tests/server.test.js tests/sample.test.js",
+    "test": "node tools/py.js -m pytest tests -q && node --test --test-concurrency=1 tests/editor-core.test.js tests/editor-dsp.test.js tests/server.test.js tests/sample.test.js",
     "test:fast": "node tools/py.js -m pytest tests -q -k \"not smoke\" && node --test tests/editor-core.test.js tests/editor-dsp.test.js",
     "bench": "node tools/py.js tools/bench.py"
   }

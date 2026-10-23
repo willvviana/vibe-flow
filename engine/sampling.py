@@ -2,6 +2,7 @@
 
 Real models only; nothing here fabricates a result. Honest limits (also shown in docs/SAMPLE.md):
   stems          Demucs htdemucs separates drums/bass/other/vocals. 'Instrumental' = drums+bass+other, 'Voice' = the vocal stem.
+                 'Lead' / 'Backing' split the voice stem by stereo position (engine/vocal_layers.py; centre-panned backing stays in Lead).
                  Separation is never perfect: faint vocal remnants stay in the instrumental and drum/hi-hat bleed in the vocals.
                  We measure and report how well vocal + instrumental add back up to the original (reconstruction residual).
   transcription  faster-whisper 'small' on CPU. Language is detected automatically per recording (and per live window).
@@ -158,7 +159,8 @@ def transcribe(x16k, language=None, offset=0.0, threads=4, vad=True, prompt=None
     segs, info = model.transcribe(x16k, language=language, vad_filter=vad, beam_size=1 if threads and vad == "live" else 5,
                                   condition_on_previous_text=False, initial_prompt=prompt,
                                   vad_parameters={"min_silence_duration_ms": 400})
-    out = [{"start": round(offset + s.start, 2), "end": round(offset + s.end, 2), "text": s.text.strip()} for s in segs if s.text.strip()]
+    out = [{"start": round(offset + s.start, 2), "end": round(offset + s.end, 2), "text": s.text.strip(), "avg_logprob": round(float(s.avg_logprob), 3)}
+           for s in segs if s.text.strip()]
     return {"language": info.language, "language_probability": round(float(info.language_probability), 3), "segments": out}
 
 
@@ -216,7 +218,8 @@ def _clap():
     return _cache["clap"]
 
 
-def _audio_embedding(x48, windows=6, win_s=10):
+def _embeddings(x48, windows=6, win_s=10):
+    """CLAP embeddings of evenly spread 10 s windows (near-silent ones skipped). Returns (mean [1, D] unit, per-window [k, D] unit)."""
     import torch
     model, proc, _ = _clap()
     n, w = len(x48), win_s * 48000
@@ -228,33 +231,91 @@ def _audio_embedding(x48, windows=6, win_s=10):
     loud = [c for c in chunks if np.sqrt(np.mean(c ** 2)) > 1e-3] or chunks[:1]
     with torch.no_grad():
         inp = proc(audios=[np.asarray(c, dtype=np.float32) for c in loud], sampling_rate=48000, return_tensors="pt")
-        e = model.get_audio_features(**inp)
-        e = torch.nn.functional.normalize(e, dim=-1).mean(0, keepdim=True)
-        return torch.nn.functional.normalize(e, dim=-1), len(loud)
+        e = torch.nn.functional.normalize(model.get_audio_features(**inp), dim=-1)
+        m = torch.nn.functional.normalize(e.mean(0, keepdim=True), dim=-1)
+        return m, e
 
 
-def _rank(emb, key, top, scale=None):
-    import torch
+def _audio_embedding(x48, windows=6, win_s=10):
+    m, e = _embeddings(x48, windows, win_s)
+    return m, len(e)
+
+
+# Label calibration (tools/clap_calibrate.py): CLAP's zero-shot scores carry strong per-label biases (measured: 'banjo', 'clarinet',
+# 'new age', 'trap' rank in the top 5 for most audio). Each label's logit is standardised against its mean / spread over a background
+# corpus of clips that are NOT used in the recognition tests, so a label ranks high only when it is unusually strong for THIS audio.
+# Tested and NOT shipped (no calibration file is installed): it did not beat the raw ranking (docs/LISTENING.md). Inert without the file.
+CALIB_PATH = os.path.join(sm.CACHE, "clap_calibration.json")
+_calib = {}
+
+
+def _calibration():
+    if "v" not in _calib:
+        try:
+            import json
+            with open(CALIB_PATH, encoding="utf-8") as f:
+                _calib["v"] = json.load(f)
+        except (OSError, ValueError):
+            _calib["v"] = None
+    return _calib["v"]
+
+
+def _logits(emb, key):
     model, _, texts = _clap()
     labels, te = texts[key]
-    logits = (emb @ te.T)[0] * float(model.logit_scale_a.exp())
-    p = torch.softmax(logits, dim=0).numpy()
-    order = np.argsort(-p)[:top]
+    return labels, ((emb @ te.T) * float(model.logit_scale_a.exp())).numpy()
+
+
+def _rank(emb, key, top, wins=None, calibrated=True):
+    """Labels ranked for `key`. With a calibration file: standardised logits, averaged between the whole-clip embedding and the
+    strongest window (so a genre that fills only part of the clip still counts). Scores are a softmax over the candidates: relative."""
+    import torch
+    labels, lg = _logits(emb, key)
+    z = lg[0]
+    cal = _calibration() if calibrated else None
+    if cal and key in cal:
+        mu, sd = np.array(cal[key]["mean"]), np.array(cal[key]["std"])
+        z = (z - mu) / sd
+        if wins is not None and len(wins) > 1:
+            _, lw = _logits(wins, key)
+            z = 0.5 * z + 0.5 * ((lw - mu) / sd).max(axis=0)
+    p = torch.softmax(torch.from_numpy(np.asarray(z, dtype=np.float32)), dim=0).numpy()
+    order = np.argsort(-z)[:top]
     return [{"label": labels[i], "score": round(float(p[i]), 3)} for i in order]
+
+
+def calibrate(paths, out=CALIB_PATH):
+    """Per-label logit mean / std over all windows of the given clips (the background corpus). Writes CALIB_PATH."""
+    import json
+    _, _, texts = _clap()
+    acc = {k: [] for k in texts}
+    for pth in paths:
+        _, e = _embeddings(load_audio(pth, 48000, mono=True)[:, 0])
+        for k in texts:
+            acc[k].append(_logits(e, k)[1])
+    res = {"clips": len(paths), "windows": int(sum(len(a) for a in acc["genre"]))}
+    for k, v in acc.items():
+        v = np.concatenate(v, axis=0)
+        res[k] = {"mean": [round(float(x), 4) for x in v.mean(0)], "std": [round(float(x), 4) for x in np.maximum(v.std(0), 1e-3)]}
+    with open(out, "w", encoding="utf-8") as f:
+        json.dump(res, f)
+    _calib.pop("v", None)
+    return res
 
 
 def tag(full_path, instrumental_path=None, progress=lambda **k: None):
     """Genre / subgenre / mood from the full mix, instruments from the instrumental stem (cleaner), plus tempo and key."""
     from . import sample_analysis
     full48 = load_audio(full_path, 48000, mono=True)[:, 0]
-    emb, used = _audio_embedding(full48)
-    out = {"genres": _rank(emb, "genre", 5), "subgenres": _rank(emb, "subgenre", 4), "moods": _rank(emb, "mood", 4),
-           "model": "laion/clap-htsat-unfused (zero-shot; scores are relative rankings, not calibrated probabilities)", "windows_used": used}
+    emb, wins = _embeddings(full48)
+    out = {"genres": _rank(emb, "genre", 5, wins), "subgenres": _rank(emb, "subgenre", 4, wins), "moods": _rank(emb, "mood", 4, wins),
+           "model": "laion/clap-htsat-unfused (zero-shot; scores are relative rankings, not calibrated probabilities)"
+                    + ("; label bias removed with a background calibration" if _calibration() else ""), "windows_used": len(wins)}
     if instrumental_path:
-        ie, _ = _audio_embedding(load_audio(instrumental_path, 48000, mono=True)[:, 0])
-        inst = _rank(ie, "instrument", 7)
+        ie, iw = _embeddings(load_audio(instrumental_path, 48000, mono=True)[:, 0])
+        inst = _rank(ie, "instrument", 7, iw)
     else:
-        inst = _rank(emb, "instrument", 7)
+        inst = _rank(emb, "instrument", 7, wins)
     out["instruments"] = inst
     x22 = sample_analysis.resample(full48, 48000)
     try:
@@ -266,6 +327,23 @@ def tag(full_path, instrumental_path=None, progress=lambda **k: None):
         out["analysis_error"] = str(e)[:200]
     progress(stage="tag", fraction=1.0)
     return out
+
+
+def split_vocal_layers(out_dir, transcript=None, progress=lambda **k: None):
+    """Lead / backing vocals from the vocal stem (engine/vocal_layers.py). Writes lead.wav + backing.wav when the stem is stereo."""
+    from . import vocal_layers
+    progress(stage="layers", fraction=0.0)
+    v, sr = sf.read(os.path.join(out_dir, "vocals.wav"), dtype="float32", always_2d=True)
+    inst, _ = sf.read(os.path.join(out_dir, "instrumental.wav"), dtype="float32", always_2d=True)
+    lead, back, rep = vocal_layers.analyse(v, inst, sr)
+    if rep["stereo"]:
+        sf.write(os.path.join(out_dir, "lead.wav"), lead, sr, subtype="PCM_24")
+        sf.write(os.path.join(out_dir, "backing.wav"), back, sr, subtype="PCM_24")
+    if transcript and transcript["segments"]:               # clarity proxy: how confidently Whisper decodes the sung words
+        lp = [s["avg_logprob"] for s in transcript["segments"] if s.get("avg_logprob") is not None]
+        rep["lead_clarity"] = {"words": sum(len(s["text"].split()) for s in transcript["segments"]), "avg_logprob": round(float(np.mean(lp)), 3) if lp else None}
+    progress(stage="layers", fraction=1.0)
+    return rep
 
 
 def vocal_presence(stem_meta):
@@ -280,11 +358,19 @@ def process(full_path, out_dir, progress=lambda **k: None):
     has_vocals = vocal_presence(stems)
     tags = tag(full_path, os.path.join(out_dir, "instrumental.wav"), progress)
     transcript = None
+    layers = None
+    versions = [("full", os.path.basename(full_path)), ("instrumental", "instrumental.wav"), ("voice", "vocals.wav")]
+    for f in ("lead.wav", "backing.wav"):                       # stale layers from an earlier processing pass
+        if os.path.exists(os.path.join(out_dir, f)):
+            os.remove(os.path.join(out_dir, f))
     if has_vocals:
         transcript = transcribe_file(os.path.join(out_dir, "vocals.wav"), progress=progress)
-    for v, f in (("full", os.path.basename(full_path)), ("instrumental", "instrumental.wav"), ("voice", "vocals.wav")):
+        layers = split_vocal_layers(out_dir, transcript)
+        if layers.get("stereo"):
+            versions += [("lead", "lead.wav"), ("backing", "backing.wav")]
+    for v, f in versions:
         write_peaks(os.path.join(out_dir, f), os.path.join(out_dir, f"peaks.{v}.json"))
     progress(stage="done", fraction=1.0)
     return {"stems": stems, "tags": tags, "vocals": {"present": has_vocals, "language": transcript["language"] if transcript else None,
                                                     "language_probability": transcript["language_probability"] if transcript else None},
-            "final_transcript": transcript, "processing_seconds": round(time.time() - t0, 1)}
+            "final_transcript": transcript, "vocal_layers": layers, "processing_seconds": round(time.time() - t0, 1)}

@@ -79,7 +79,8 @@ def test_source_presence_and_tempo_alignment_change_gradually_with_p():
     res = {p: sc.compose(x, sr, settings(p), fake_layer(110)) for p in ps}
     sim = [corr(res[p]["mix"], x) for p in ps]
     assert all(b >= a - 0.1 for a, b in zip(sim, sim[1:])), sim              # closer to the sample as p rises (chance-level noise below 0.1 tolerated)
-    assert sim[3] > sim[1] + 0.3 and sim[5] > sim[3]                         # clear steps once bars of the sample are kept
+    assert sim[3] > sim[1] + 0.25 and sim[5] > sim[3]                        # clear steps once bars of the sample are kept (layers are loudness-matched,
+                                                                             # so unretained bars are as loud as the sample: less raw correlation than before)
     assert sim[-1] > 0.6 and sim[0] < 0.3
     err = [res[p]["evaluation"]["layer_tempo_error_bpm"] for p in ps]
     assert err[-1] <= err[0] + 0.5                                            # alignment never makes the tempo worse
@@ -105,6 +106,21 @@ def test_peak_safety_reduces_layers_before_touching_the_sample():
     assert np.allclose(r["mix"] - r["layers"], x, atol=1e-5)                  # the sample itself was not scaled
 
 
+def test_one_coincident_peak_does_not_make_the_whole_layer_quieter():
+    sr, n = 44100, 44100 * 4
+    t = np.arange(n) / sr
+    s = 0.2 * np.sin(2 * np.pi * 220 * t)
+    s[sr: sr + 2000] = 0.97 * np.sign(np.sin(2 * np.pi * 220 * t[sr: sr + 2000]))   # a near-full-scale burst in the sample
+    x = np.stack([s, s], axis=1).astype(np.float32)
+    layer = (0.3 * np.sin(2 * np.pi * 330 * t)).astype(np.float32)
+    a = {"bar_starts_s": [0.0, 2.0], "bar_seconds": 2.0}
+    mix, src, lay, _ = sc.mix_down(x, layer, sr, a, [True, True], 0.0, 100)
+    assert np.abs(mix).max() <= 0.9901 and np.allclose(src, x)                       # no clipping, sample untouched
+    away = slice(int(2.5 * sr), int(3.5 * sr))                                       # a second away from the burst
+    assert np.allclose(lay[away, 0], layer[away], atol=1e-6)                         # the layer keeps its level there
+    assert 0 < sc.mix_down.last_limiter["limited_share"] < 0.05
+
+
 def test_validation_adapt_mode_and_no_vocals():
     ok = prompting.validate({"prompt": "x", "mode": "adapt", "reference": "r.wav", "adherence": "40", "layer_level_db": -9})
     assert ok["adherence"] == 40.0 and ok["layer_level_db"] == -9.0
@@ -123,3 +139,43 @@ def test_plan_hints_are_written_into_the_text_settings():
     assert abs(ts["bpm"] - r["analysis"]["bpm"]) < 1.0 and ts["key"] == r["analysis"]["key"]["name"]
     r0 = sc.compose(x, sr, settings(0), fake_layer())
     assert r0["text_settings"]["bpm"] is None and r0["text_settings"]["key"] is None     # 0 %: the sample's tempo/key are not imposed
+
+
+def test_layers_are_loudness_matched_to_the_sample_within_limits():
+    x, sr = src_stereo(120)
+    quiet = lambda *a: (fake_layer(110)(*a) * 10 ** (-20 / 20)).astype(np.float32)   # a take 20 dB too quiet (seen with some seeds)
+    r = sc.compose(x, sr, settings(0), quiet)
+    assert r["evaluation"]["layer_level_match_db"] == sc.MATCH_LIMIT_DB              # raised, but never by more than the limit
+    ok = sc.compose(x, sr, settings(0), fake_layer(110))
+    lvl = lambda y: sc._active_rms(y.mean(axis=1), sr)
+    assert abs(20 * np.log10(lvl(ok["mix"]) / lvl(x))) < 1.5                          # at 0 % the output now sits at the sample's loudness
+    silent = sc.match_level(np.zeros(1000, np.float32), np.ones(1000, np.float32), sr)
+    assert silent[1] == 0.0 and not silent[0].any()
+
+
+def test_tempo_retry_keeps_the_take_closer_to_the_sample(monkeypatch, tmp_path):
+    """run() with the model replaced: the first take is at a 4:3 tempo (unfixable by stretching), the retry is on tempo."""
+    import soundfile as sf
+    from engine import generate, library, registry
+    x, sr = src_stereo(120)
+    ref = tmp_path / "s.wav"
+    sf.write(ref, x, sr)
+    monkeypatch.setenv("VIBEFLOW_LIBRARY", str(tmp_path / "lib"))
+    takes = iter([160])
+    monkeypatch.setattr(generate, "_load", lambda *a, **k: (None, None))
+    def infer(proc, model, device, prompt, new_s, out_sr, c, emit, a, b, ref=None, label=""):
+        y, _ = __import__("tests.test_adapt_dsp", fromlist=["synth_song"]).synth_song(next(takes), sr=32000)
+        n = int(new_s * 32000) + 10
+        return (0.5 * np.pad(y, (0, max(0, n - len(y))))[:n]).astype(np.float32)
+    monkeypatch.setattr(generate, "_infer", infer)
+    monkeypatch.setattr(sc.sa, "vocals_probability", lambda *a: None)
+    off = sc.run({"settings": {"mode": "adapt", "reference": str(ref), "adherence_level": "low", "instruments": ["piano"], "prompt": "x", "seed": 9}})
+    assert "tempo_retry" not in off["evaluation"]                                     # opt-in: off by default
+    takes = iter([160, 120])
+    meta = sc.run({"settings": {"mode": "adapt", "reference": str(ref), "adherence_level": "low", "instruments": ["piano"], "prompt": "x", "seed": 9,
+                                "tempo_retry": True}})
+    tr = meta["evaluation"]["tempo_retry"]
+    assert tr["first_error_bpm"] > sc.TEMPO_RETRY_BPM and tr["kept"] == "retry" and tr["retry_error_bpm"] < tr["first_error_bpm"]
+    assert meta["seed_used"] == tr["retry_seed"] != meta["seed"]
+    assert any("second take" in w for w in meta["warnings"])
+    assert os.path.exists(library.paths(meta["id"])[1])

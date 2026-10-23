@@ -46,6 +46,7 @@
         <a href="create.html">Create</a>
         <a href="sample.html">Sample</a>
         <a href="editor.html">Editor</a>
+        <a href="listening.html">Listening</a>
         <div class="dd">
           <a class="dd-t" href="/about" aria-haspopup="true">About</a>
           <ul class="dd-m" aria-label="About sections">
@@ -91,11 +92,19 @@
                 <label><input type="radio" name="recver" value="full" checked> Full recording</label>
                 <label><input type="radio" name="recver" value="instrumental"> Instrumental</label>
                 <label><input type="radio" name="recver" value="voice"> Voice only</label>
+                <label class="rv-layer" hidden><input type="radio" name="recver" value="lead"> Lead vocal</label>
+                <label class="rv-layer" hidden><input type="radio" name="recver" value="backing"> Backing vocals</label>
               </div>
               <p id="rec-note" class="note"></p>
             </div>
           </div>
           <div id="adapt-box" class="adapt" hidden>
+            <div class="adh-levels" role="radiogroup" aria-label="Adherence level">
+              <button type="button" role="radio" data-level="low" data-p="15">Low</button>
+              <button type="button" role="radio" data-level="medium" data-p="50">Medium</button>
+              <button type="button" role="radio" data-level="high" data-p="75">High</button>
+              <button type="button" role="radio" data-level="strict" data-p="100">Strict</button>
+            </div>
             <label class="adh">
               <span class="adh-h"><span>Loose</span><output id="adh-out">50%</output><span>Close to sample</span></span>
               <input type="range" id="adherence" min="0" max="100" step="1" value="50" aria-describedby="adh-desc">

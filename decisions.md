@@ -40,6 +40,16 @@ Short record of the choices that shaped Vibe Flow, why they were made, and what 
 | 25 | Create receives Full / Instrumental / Voice as a mono 32 kHz 16-bit reference (<= 10 min) and fills genre, instruments, mood, BPM and key from the edited tags | Fits Create's existing reference limits | A voice reference guides rhythm, key and tempo only; the generator stays instrumental |
 | 26 | Static files are served with `Cache-Control: no-cache` | Stale scripts were served after edits | One revalidation per file |
 
+## Listening Pack (`/listening`)
+| # | Decision | Why | Cost / revisit when |
+|---|---|---|---|
+| 27 | Named adherence levels **Low 15 / Medium 50 / High 75 / Strict 100 %** on top of the existing control mapping; slider kept | Each step changes a mechanism (audio conditioning from Medium, key hint from Medium, bars kept 0 / ~1/3 / ~2/3 / all) | Fixed points; revisit if blind ratings show two levels sound the same |
+| 28 | Measure every result twice: the **mix** and the **added layers only** | Copied bars make the mix look close at high levels; the layers show what the model itself follows | Two numbers to read instead of one |
+| 29 | Blind pack with a server-side key that is never served; ratings unblind it | Measures cannot hear; the listener must not know the level | One listener and few clips: a direction, not proof |
+| 30 | **Lead / backing split by stereo position** (inter-channel similarity mask on the Demucs voice stem), no extra model | No lead/backing separation model is installed; panning is the standard production cue | Centre-panned backing stays in Lead; mono voices have no backing layer (measured on known mixes, docs/LISTENING.md) |
+| 31 | Harmony measured as a chroma profile relative to the lead's pitch, on the side signal | A single-pitch tracker on a two-voice harmony reports the chord root (seen in testing) | Coarse: intervals, not voices |
+| 32 | Generated tracks of a pack stay inside the pack folder (`userdata/listening/<id>/lib`) | Test runs must not fill "Your Songs" | Delete a pack to free its audio |
+
 ## Working rules adopted
 - Do not claim audio qualities that were not confirmed by listening; state what was measured and what was not.
 - Do not start listening packs or large generation runs until the user says go.

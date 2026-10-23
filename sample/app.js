@@ -270,7 +270,7 @@
   }
 
   // ---- processing progress (after Stop)
-  const STAGES = { queued: 'Waiting to start…', separate: 'Separating the instrumental and the voice', tag: 'Analysing genre, instruments, mood, tempo and key', transcribe: 'Transcribing the isolated voice', done: 'Finishing' };
+  const STAGES = { queued: 'Waiting to start…', separate: 'Separating the instrumental and the voice', tag: 'Analysing genre, instruments, mood, tempo and key', transcribe: 'Transcribing the isolated voice', layers: 'Splitting lead and backing vocals', done: 'Finishing' };
   const watchers = new Set();
   async function watch(id) {
     if (watchers.has(id)) return; watchers.add(id);
@@ -314,9 +314,11 @@
 
   // ============================================================ library
   const VERS = [['full', 'Full recording', 'original, unmodified'], ['instrumental', 'Instrumental', 'vocals removed'], ['voice', 'Voice only', 'speech and singing']];
+  const LAYERS = [['lead', 'Lead vocal', 'centre of the voice'], ['backing', 'Backing vocals', 'sides of the voice']];
+  const versOf = (m) => (m.vocal_layers && m.vocal_layers.stereo ? VERS.concat(LAYERS) : VERS);
   const cards = new Map();                                // id -> { el, sig, audios }
   let playing = null;                                     // { id, ver, audio }
-  const sigOf = (m) => JSON.stringify([m.status, m.stage, m.name, m.duration, m.tags, m.transcript && m.transcript.edited, m.transcript && m.transcript.segments.length, m.error]);
+  const sigOf = (m) => JSON.stringify([m.status, m.stage, m.name, m.duration, m.tags, !!m.vocal_layers, m.transcript && m.transcript.edited, m.transcript && m.transcript.segments.length, m.error]);
 
   async function loadLibrary(force) {
     let list; try { list = await api('/api/recordings'); } catch (e) { $('#lib').innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
@@ -362,9 +364,9 @@
       </div>
       ${m.status === 'failed' ? `<div class="alert">${esc(m.error || 'Processing failed.')} The original recording is safe.</div>` : ''}
       <div class="spcmp" ${ready ? '' : 'hidden'}>Compare, same position:
-        <div class="seg" role="group" aria-label="Switch version while playing">${VERS.map(([v, l]) => `<button data-sw="${v}" aria-pressed="false">${l}</button>`).join('')}</div>
+        <div class="seg" role="group" aria-label="Switch version while playing">${versOf(m).map(([v, l]) => `<button data-sw="${v}" aria-pressed="false">${l}</button>`).join('')}</div>
       </div>
-      <div class="vers">${VERS.map(([v, l, sub]) => {
+      <div class="vers">${versOf(m).map(([v, l, sub]) => {
         const avail = v === 'full' ? hasFull : ready;
         return `<div class="ver" data-v="${v}">
           <button class="pl" data-a="play" aria-label="Play ${l}" ${avail ? '' : 'disabled'}>▶</button>
@@ -379,6 +381,7 @@
       ${stems ? `<p class="stems-note">${stems}</p>` : ''}
       ${m.tags ? tagsHtml(m) : (ready ? '' : '<p class="note">Genre, instruments, mood, tempo and key appear when processing finishes.</p>')}
       ${vocalsLine ? `<div class="row"><span class="chip">${vocalsLine}</span></div>` : ''}
+      ${m.vocal_layers ? vocalLayersHtml(m.vocal_layers) : ''}
       <details class="tx"><summary>Transcription${m.transcript && m.transcript.language ? ' · ' + esc(langName(m.transcript.language)) : ''}${m.transcript && m.transcript.edited ? ' (edited)' : ''}</summary>
         <textarea class="tr-box" rows="7" readonly aria-label="Saved transcription">${esc(segsToText(m.transcript && m.transcript.segments))}</textarea>
         <div class="row"><button class="btn btn-ghost sm" data-a="tedit">Edit</button><button class="btn btn-ghost sm" data-a="tcopy">Copy</button><button class="btn btn-ghost sm" data-a="ttxt">.txt</button><button class="btn btn-ghost sm" data-a="tsrt">.srt</button>
@@ -387,6 +390,16 @@
     const c = { el, m, sig: sigOf(m), audios: {}, peaks: {} };
     wireCard(c);
     return c;
+  }
+
+  function vocalLayersHtml(v) {
+    const L = v.lead || {}, B = v.backing || {}, h = v.harmony && v.harmony.intervals && v.harmony.intervals.length ? v.harmony.intervals.map((i) => esc(i.name)).join(', ') : '';
+    const pct = (x) => (x == null ? '—' : Math.round(x * 100) + '%');
+    return `<p class="stems-note"><b>Vocal layers.</b> ${v.stereo ? `Backing vocals carry ${pct(v.backing_share)} of the voice energy${v.backing_share < 0.05 ? ' (little or no backing detected)' : ''}.` : 'The voice is mono, so lead and backing cannot be told apart by position.'}
+      Lead: ${L.median_f0_hz ? `median pitch ${esc(L.median_f0_hz)} Hz, range ${esc(L.pitch_range_semitones)} semitones, ` : ''}${L.intonation_cents != null ? `${esc(L.intonation_cents)} cents from the nearest note (median), ` : ''}sung ${pct(L.voiced_ratio)} of the time${v.lead_timing_ms != null ? `, onsets ${esc(v.lead_timing_ms)} ms from the 8th-note grid (unrelated onsets would be ~${esc(v.timing_chance_ms)} ms)` : ''}.
+      ${v.backing_share >= 0.05 && v.stereo ? `Backing: ${B && B.median_f0_hz ? `median pitch ${esc(B.median_f0_hz)} Hz, ` : B && B.note ? 'several voices at once, ' : ''}active during ${pct(v.backing_active_while_lead)} of the lead${h ? `; intervals above the lead: ${h}` : ''}.` : ''}
+      ${v.lead_clarity && v.lead_clarity.avg_logprob != null ? `Clarity: ${esc(v.lead_clarity.words)} words transcribed, Whisper confidence ${esc(v.lead_clarity.avg_logprob)} (closer to 0 is clearer).` : ''}
+      Separation is by stereo position: backing vocals panned to the centre stay in the lead.</p>`;
   }
 
   function tagsHtml(m) {

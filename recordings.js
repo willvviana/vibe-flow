@@ -8,7 +8,7 @@ const { spawn } = require('child_process');
 module.exports = function createRecordings({ ROOT, PY, engine, readBody, readJson, send, serveFile, scrub, uploads, UPLOADS }) {
   const DIR = process.env.VIBEFLOW_RECORDINGS || path.join(ROOT, 'userdata', 'recordings');
   fs.mkdirSync(DIR, { recursive: true });
-  const FILES = { full: 'full.wav', instrumental: 'instrumental.wav', voice: 'vocals.wav' };
+  const FILES = { full: 'full.wav', instrumental: 'instrumental.wav', voice: 'vocals.wav', lead: 'lead.wav', backing: 'backing.wav' };
   const CHUNK_MAX = 64 * 1024 * 1024;
   const MAX_PCM_BYTES = 6 * 3600 * 48000 * 2 * 4;               // refuse to grow one recording beyond 6 h of 48 kHz stereo float
   const env = { ...process.env, PYTHONIOENCODING: 'utf-8', TOKENIZERS_PARALLELISM: 'false' };
@@ -186,7 +186,7 @@ module.exports = function createRecordings({ ROOT, PY, engine, readBody, readJso
           const mk = (arr = []) => arr.map(t => ({ label: t.label, score: t.score, edited: false }));
           const t = r.tags || {};
           Object.assign(cur, {
-            status: 'ready', stage: 'done', pct: 100, error: undefined, eta_s: undefined, stems: r.stems, vocals: r.vocals, processing_seconds: r.processing_seconds,
+            status: 'ready', stage: 'done', pct: 100, error: undefined, eta_s: undefined, stems: r.stems, vocals: r.vocals, vocal_layers: r.vocal_layers || undefined, processing_seconds: r.processing_seconds,
             tags: { genres: mk(t.genres), subgenres: mk(t.subgenres), instruments: mk(t.instruments), moods: mk(t.moods), bpm: t.bpm, key: t.key, model: t.model },
           });
           if (r.final_transcript && r.final_transcript.segments.length) {         // the vocal stem gives a cleaner pass than the live window decoding
@@ -280,7 +280,7 @@ module.exports = function createRecordings({ ROOT, PY, engine, readBody, readJso
       live.set(id, { sr, ch, bytes: 0, committed: 0, segments: [], lang: null, language: null, busy: false, state: 'listening', loaded: false, error: null, last: Date.now() });
       send(res, 200, m); return true;
     }
-    if ((g = p.match(/^\/api\/recordings\/([a-f0-9]{16})(?:\/(pcm|live|stop|discard|pause|resume|audio|peaks|use|reprocess)(?:\/(full|instrumental|voice))?)?$/))) {
+    if ((g = p.match(/^\/api\/recordings\/([a-f0-9]{16})(?:\/(pcm|live|stop|discard|pause|resume|audio|peaks|use|reprocess)(?:\/(full|instrumental|voice|lead|backing))?)?$/))) {
       const id = g[1], act = g[2], ver = g[3], m = readMeta(id);
       if (!m) { send(res, 404, { error: 'Recording not found.' }); return true; }
       if (act === 'pcm' && mth === 'POST') {
@@ -328,11 +328,11 @@ module.exports = function createRecordings({ ROOT, PY, engine, readBody, readJso
         if (!src || !fs.existsSync(src)) { send(res, 404, { error: 'That version is not available (yet).' }); return true; }
         const uid = crypto.randomBytes(8).toString('hex'), dest = path.join(UPLOADS, uid + '.wav');
         try { await engine(['sample-reference', src, dest]); } catch (e) { send(res, 400, { error: e.message }); return true; }
-        const label = { full: 'Full recording', instrumental: 'Instrumental', voice: 'Voice only' }[v];
+        const label = { full: 'Full recording', instrumental: 'Instrumental', voice: 'Voice only', lead: 'Lead vocal', backing: 'Backing vocals' }[v];
         const name = `${m.name} - ${label}.wav`;
         uploads.set(uid, { path: dest, name });
         let info = {}; try { info = (await engine(['probe', dest])).info; } catch {}
-        send(res, 200, { id: uid, name, version: v, recording: id, ...info, analysis: { tags: m.tags || null, vocals: m.vocals || null } }); return true;
+        send(res, 200, { id: uid, name, version: v, recording: id, ...info, analysis: { tags: m.tags || null, vocals: m.vocals || null, vocal_layers: m.vocal_layers ? { stereo: !!m.vocal_layers.stereo, backing_share: m.vocal_layers.backing_share } : null } }); return true;
       }
       if (act === 'reprocess' && mth === 'POST') {
         if (!fs.existsSync(path.join(dirOf(id), FILES.full))) { send(res, 400, { error: 'The original recording file is missing.' }); return true; }

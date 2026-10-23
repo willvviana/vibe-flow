@@ -69,13 +69,23 @@
   // adherence slider: describes what the chosen percentage actually does (mirrors engine/adherence.py)
   const ADH = [[0, 'New music, inspired by the sample only in general terms. None of the sample is kept.'],
     [10, 'New composition; the sample’s tempo is used. About 3% of its bars are kept (none on short samples).'],
+    [15, 'Low: new music in the sample’s tempo. None of the sample is kept and there is no audio conditioning, so the instruments and genre you select are followed most closely.'],
+    [16, 'Loose: new music in the sample’s tempo; a few bars of the sample may be kept on long samples.'],
     [25, 'Loosely inspired: tempo and key follow the sample and the new layers continue from its first bar.'],
     [50, 'Balanced: about a third of the sample’s bars are kept as-is; the new layers are aligned to its tempo and key.'],
     [75, 'Close: about two thirds of the bars are kept untouched; layers are aligned and carved around them.'],
     [100, 'Fully close: the whole sample is kept untouched and new layers are added underneath.']];
   const adhText = v => { let d = ADH[0][1]; for (const [k, t] of ADH) if (v >= k) d = t; return d; };
   const adh = $('#adherence'), level = $('#level');
-  const adhPaint = () => { $('#adh-out').textContent = adh.value + '%'; $('#adh-desc').textContent = adhText(+adh.value); };
+  const levelBtns = $$('.adh-levels button');      // named levels (engine/adherence.py LEVELS); the slider stays for in-between values
+  const adhLevel = () => (levelBtns.find(b => +b.dataset.p === +adh.value) || {}).dataset?.level || null;
+  const adhPaint = () => {
+    const lv = adhLevel();
+    $('#adh-out').textContent = adh.value + '%' + (lv ? ` · ${lv[0].toUpperCase() + lv.slice(1)}` : '');
+    $('#adh-desc').textContent = adhText(+adh.value);
+    levelBtns.forEach(b => b.setAttribute('aria-checked', b.dataset.level === lv));
+  };
+  levelBtns.forEach(b => b.addEventListener('click', () => { adh.value = b.dataset.p; adhPaint(); }));
   adh.addEventListener('input', adhPaint); adhPaint();
   level.addEventListener('input', () => { $('#lvl-out').textContent = level.value + ' dB'; });
 
@@ -107,7 +117,7 @@
       bpm: $('#bpm').value, key: $('#key').value, time_signature: $('#tsig').value,
       duration: +$('#duration').value, format: $('#format').value, seed: $('#seed').value, mode, fast: $('#fast').checked,
       reference: mode === 'text' ? null : refId,
-      ...(mode === 'adapt' ? { adherence: +adh.value, layer_level_db: +level.value } : {})
+      ...(mode === 'adapt' ? { adherence: +adh.value, adherence_level: adhLevel(), layer_level_db: +level.value } : {})
     };
   }
 
@@ -298,7 +308,7 @@
     if (t.key && KEYS.includes(t.key.value)) { $('#key').value = t.key.value; filled.push('key'); }
     return filled;
   }
-  const VERSION_LABEL = { full: 'Full recording', instrumental: 'Instrumental track', voice: 'Voice only' };
+  const VERSION_LABEL = { full: 'Full recording', instrumental: 'Instrumental track', voice: 'Voice only', lead: 'Lead vocal', backing: 'Backing vocals' };
   let recCur = null;
   async function useRecording(id, version, fill) {
     const r = await api(`/api/recordings/${id}/use?version=${version}`, { method: 'POST' });
@@ -310,7 +320,8 @@
     $('#rec-note').textContent = fill
       ? (filled.length ? `Filled ${filled.join(', ')} from the audio analysis. Change anything before generating.` : 'No analysis tags were available for this recording; set the fields yourself.')
       : `Now using: ${VERSION_LABEL[version]}. Your genre, instrument, mood and tempo choices were kept.`;
-    if (version === 'voice') $('#rec-note').textContent += ' The voice stem guides rhythm, key and tempo only; the music generated is instrumental.';
+    $$('.rv-layer').forEach(l => { l.hidden = !(r.analysis && r.analysis.vocal_layers && r.analysis.vocal_layers.stereo); });
+    if (['voice', 'lead', 'backing'].includes(version)) $('#rec-note').textContent += ' The vocal version guides rhythm, key and tempo only; the music generated is instrumental.';
     return r;
   }
   $$('input[name=recver]').forEach(rd => rd.addEventListener('change', async () => {

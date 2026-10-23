@@ -267,6 +267,9 @@ details p{color:var(--muted);padding-bottom:18px}
 .adapt{margin-top:12px;padding:12px;border:1px solid var(--line);border-radius:14px;background:var(--bg)}
 .adh{display:grid;gap:6px}.adh-h{display:flex;justify-content:space-between;font-size:.85rem;color:var(--muted)}.adh-h output{color:var(--text);font-weight:600}
 .adh input[type=range]{accent-color:var(--v);width:100%}
+.adh-levels{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:8px}
+.adh-levels button{padding:8px 0;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.03);color:var(--muted);font:inherit;font-size:.85rem;cursor:pointer}
+.adh-levels button[aria-checked=true]{border-color:var(--v);background:rgba(139,92,246,.18);color:var(--text);font-weight:600}
 .cmp{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:8px 0}.cmp small{color:var(--muted)}
 @media(max-width:760px){.cmp{grid-template-columns:1fr}}
 
