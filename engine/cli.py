@@ -118,6 +118,17 @@ def main(argv):
                 raise ValueError(f"Create accepts references up to {audio.MAX_REF_SECONDS // 60} minutes; this audio is {len(x) / 32000 / 60:.1f} minutes.")
             sf.write(args[1], x, 32000, subtype="PCM_16")
             out(event="result", ok=True)
+        elif cmd == "listening-run":               # <spec.json>: Listening Pack (all adherence levels on each sample, measured; see engine/listening.py)
+            from . import listening
+            with open(args[0], encoding="utf-8") as f:
+                spec = json.load(f)
+            rep = listening.run(spec, prog)
+            out(event="result", run=os.path.basename(spec["out_dir"]), overall=rep["overall"])
+        elif cmd == "listening-score":             # <run_dir> <ratings.json>: unblind the human ratings of a pack
+            from . import listening
+            with open(args[1], encoding="utf-8") as f:
+                ratings = json.load(f)
+            out(event="result", summary=listening.score(args[0], ratings))
         elif cmd == "cleanup":
             out(event="result", removed=library.cleanup(float(args[0]) if args else 30))
         else:

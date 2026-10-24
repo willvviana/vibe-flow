@@ -537,3 +537,14 @@ Tempo: on the 36 real MusicGen clips of round 4 (requested BPM known) the estima
 ## Tests
 `tests/test_adapt_dsp.py` (analysis on synthetic songs, stretch/pitch/carve/envelope) and `tests/test_adapt_compose.py` (mapping monotone and gradual; retained bars grow; **100 % returns the original exactly after subtracting the layers**; 0 % contains no source; similarity rises with p; alignment never worsens tempo; layer level independent of p; peak safety does not scale the sample; no-vocals validation) are offline (fake generator).
 Real-model HTTP test: upload, adapt at 100 %, vocals refused, `source`/`layers` parts downloadable, delete removes all three files.
+
+---
+
+# Round 8: Listening Pack (adherence levels, vocals, instruments and genres)
+
+Full method and numbers: **docs/LISTENING.md**. In short (measurements only; no listening yet):
+- Adherence levels Low / Medium / High / Strict (15 / 50 / 75 / 100 %) were run through the real adapt pipeline on four samples (full mix, instrumental stem, voice stem from a Sample-page recording; an Editor sample), 2 seeds each, three times (baseline, intermediate, final). Final pack: every automatic check passes, levels distinct and in the same order on every sample type.
+- Fixed from the measurements: seed-dependent output level (loudness match), whole-take attenuation by the mixer's peak safety (now a local limiter on the layers), an unstable tempo score (now periodicity similarity), a flawed Strict check. A tempo-retry fix was built, measured (2 of 8 helped, +28 % time) and left opt-in.
+- Lead / backing vocals: stereo-position split of the Demucs voice stem; on known mixes lead SI-SDR 6.6 dB, backing 4.8 dB, planted harmony found; centre-panned backing cannot be separated.
+- CLAP tagging: single instruments 87.5 % top 3; mixtures poor (both of 2 instruments in top 5: 18 %; 3: 0 %); genre 53 % top 3, mixed genres never both. A label calibration was tried and rejected.
+- Selected instruments drive the layers at Low; from Medium the sample's timbre mostly overrides them on a full mix. Guidance 10: inconclusive on 2 seeds.

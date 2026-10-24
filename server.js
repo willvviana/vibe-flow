@@ -19,7 +19,7 @@ const TYPES = {
   '.png': 'image/png', '.txt': 'text/plain', '.xml': 'application/xml', '.webmanifest': 'application/manifest+json',
   '.wav': 'audio/wav', '.json': 'application/json', '.flac': 'audio/flac', '.mp3': 'audio/mpeg'
 };
-const PUBLIC = new Set(['sample.html', 'sample.css', 'sample/app.js', 'sample/recorder-worklet.js', 'editor.html', 'editor.css', 'editor/core.js', 'editor/dsp.js', 'editor/engine.js', 'editor/worker.js', 'editor/storage.js', 'editor/ui.js', 'editor/ui-panels.js', 'editor/ui-export.js', 'editor/selftest.js', 'vendor/lame.min.js', 'index.html', 'about.html', 'create.html', 'styles.css', 'script.js', 'studio.js', 'favicon.svg', 'og-image.png',
+const PUBLIC = new Set(['listening.html', 'listening.css', 'listening/app.js', 'sample.html', 'sample.css', 'sample/app.js', 'sample/recorder-worklet.js', 'editor.html', 'editor.css', 'editor/core.js', 'editor/dsp.js', 'editor/engine.js', 'editor/worker.js', 'editor/storage.js', 'editor/ui.js', 'editor/ui-panels.js', 'editor/ui-export.js', 'editor/selftest.js', 'vendor/lame.min.js', 'index.html', 'about.html', 'create.html', 'styles.css', 'script.js', 'studio.js', 'favicon.svg', 'og-image.png',
   'apple-touch-icon.png', 'robots.txt', 'sitemap.xml', 'site.webmanifest']);
 
 // Never leak filesystem layout to the browser.
@@ -29,6 +29,10 @@ const UPLOAD_TTL_MS = 24 * 3600 * 1000;
 const EDITOR_MAX = 400 * 1024 * 1024;            // rendered mixes can be long and 24/32-bit
 const SAMPLES = process.env.VIBEFLOW_SAMPLES || path.join(ROOT, 'userdata', 'samples');
 fs.mkdirSync(SAMPLES, { recursive: true });
+const RECORDINGS = process.env.VIBEFLOW_RECORDINGS || path.join(ROOT, 'userdata', 'recordings');
+const LISTENING = process.env.VIBEFLOW_LISTENING || path.join(ROOT, 'userdata', 'listening');
+fs.mkdirSync(LISTENING, { recursive: true });
+const LISTEN_MAX_MS = 4 * 3600 * 1000;           // a full pack is many generations in a row
 
 const send = (res, code, obj) => {
   res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
@@ -107,7 +111,7 @@ function getWorker() {
     const cur = w.current; w.current = null;
     if (!cur) return;
     if (proc.killedByUs) return cur.reject(Object.assign(new Error('Cancelled.'), { cancelled: true }));
-    if (!cur.started && !cur.retried) { cur.retried = true; return workerRun(cur).then(cur.resolve, cur.reject); }   // worker idled out just as we sent the job
+    if (!cur.started && !cur.retried) { cur.retried = true; const { resolve, reject } = cur; return workerRun(cur).then(resolve, reject); }   // worker idled out just as we sent the job (keep the ORIGINAL settle functions: workerRun replaces cur.resolve/reject)
     console.error('[worker] exit', code, scrub(stderr));
     cur.reject(new Error('The engine stopped unexpectedly. See the server console for details.'));
   });
@@ -137,9 +141,9 @@ function startJob(kind, args, extra = {}) {
     onSpawn: p => { job.proc = p; clearTimeout(job.timer); job.timer = setTimeout(() => { p.killedByUs = true; job.timedOut = true; p.kill(); }, MAX_JOB_MS); },
     onProgress: e => Object.assign(job, { stage: e.stage, pct: Math.round(e.pct ?? job.pct), message: e.message || job.message }) })
   : engine(args, {
-    onSpawn: p => { job.proc = p; job.timer = setTimeout(() => { p.killedByUs = true; job.timedOut = true; p.kill(); }, MAX_JOB_MS); },
-    onProgress: e => Object.assign(job, { stage: e.stage, pct: Math.round(e.pct ?? job.pct), message: e.message || job.message })
-  })).then(r => Object.assign(job, { status: 'complete', pct: 100, stage: 'done', message: 'Done.', track: r.track }))
+    onSpawn: p => { job.proc = p; job.timer = setTimeout(() => { p.killedByUs = true; job.timedOut = true; p.kill(); }, extra.maxMs || MAX_JOB_MS); },
+    onProgress: e => Object.assign(job, { stage: e.stage, pct: Math.round(e.pct ?? job.pct), message: e.message || job.message, eta_s: e.eta_s })
+  })).then(r => Object.assign(job, { status: 'complete', pct: 100, stage: 'done', message: 'Done.', track: r.track, run: r.run }))
     .catch(e => Object.assign(job, { status: e.cancelled && !job.timedOut ? 'cancelled' : 'failed', error: job.timedOut ? 'The job took too long and was stopped.' : e.message, message: job.timedOut ? 'Timed out.' : e.message }))
     .finally(() => {
       clearTimeout(job.timer); delete job.proc;
@@ -148,7 +152,7 @@ function startJob(kind, args, extra = {}) {
     });
   return job;
 }
-const pub = j => { const { proc, tmp, timer, timedOut, ...rest } = j; return rest; };
+const pub = j => { const { proc, tmp, timer, timedOut, maxMs, ...rest } = j; return rest; };
 
 // ---- uploads ---------------------------------------------------------------------
 const uploads = new Map();   // id -> { path, info }
@@ -327,6 +331,82 @@ async function api(req, res, url) {
     }
     if (!g[2] && m === 'DELETE') { fs.unlinkSync(wavf); fs.unlink(jsonf, () => {}); return send(res, 200, { ok: true }); }
   }
+  // ---- listening pack: every adherence level on samples from the Sample page / Editor / an upload, measured + blind pack ----
+  if (m === 'POST' && p === '/api/listening/run') {
+    const b = await readJson(req);
+    const LV = ['low', 'medium', 'high', 'strict'];
+    const levels = (Array.isArray(b.levels) && b.levels.length ? b.levels : LV).filter(l => LV.includes(l));
+    const seeds = (Array.isArray(b.seeds) && b.seeds.length ? b.seeds : [5]).map(Number).filter(n => Number.isInteger(n) && n >= 0).slice(0, 4);
+    if (!levels.length || !seeds.length) return send(res, 400, { error: 'Choose at least one level and one seed.' });
+    const sources = [];
+    for (const s of (Array.isArray(b.sources) ? b.sources : []).slice(0, 6)) {
+      if (s.type === 'recording' && /^[a-f0-9]{16}$/.test(s.id || '')) {
+        const file = { full: 'full.wav', instrumental: 'instrumental.wav', voice: 'vocals.wav', lead: 'lead.wav', backing: 'backing.wav' }[s.version];
+        const f = file && path.join(RECORDINGS, s.id, file);
+        if (!f || !fs.existsSync(f)) return send(res, 400, { error: 'That recording version is not available (is it processed?).' });
+        let name = s.id; try { name = JSON.parse(fs.readFileSync(path.join(RECORDINGS, s.id, 'meta.json'), 'utf8')).name || name; } catch {}
+        sources.push({ path: f, kind: ['voice', 'lead', 'backing'].includes(s.version) ? 'vocals' : s.version, label: `${name} (${s.version})`, origin: `recording:${s.id}/${s.version}` });
+      } else if (s.type === 'sample' && /^[a-f0-9]{16}$/.test(s.id || '')) {
+        const f = path.join(SAMPLES, s.id + '.wav');
+        if (!fs.existsSync(f)) return send(res, 400, { error: 'Editor sample not found.' });
+        const meta = JSON.parse(fs.readFileSync(path.join(SAMPLES, s.id + '.json'), 'utf8'));
+        sources.push({ path: f, kind: meta.kind || 'full', label: `${meta.name} (editor, ${meta.kind || 'full'})`, origin: `sample:${s.id}` });
+      } else if (s.type === 'upload' && uploads.get(String(s.id))) {
+        const u = uploads.get(String(s.id));
+        sources.push({ path: u.path, kind: ['full', 'instrumental', 'vocals'].includes(s.kind) ? s.kind : 'full', label: u.name, origin: 'upload' });
+      } else return send(res, 400, { error: 'Unknown sample source.' });
+    }
+    if (!sources.length) return send(res, 400, { error: 'Choose at least one sample.' });
+    const strs = v => (Array.isArray(v) ? v : []).map(String).slice(0, 8);
+    if (![...strs(b.instruments), ...strs(b.genres), ...strs(b.moods)].length) return send(res, 400, { error: 'Pick at least one instrument, genre or mood for the new layers.' });
+    const id = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14) + '-' + crypto.randomBytes(3).toString('hex');
+    const spec = { name: String(b.name || 'Listening pack').slice(0, 80), sources, levels, seeds, instruments: strs(b.instruments), genres: strs(b.genres), moods: strs(b.moods),
+      seconds: Math.min(30, Math.max(8, +b.seconds || 20)), layer_level_db: Math.min(0, Math.max(-24, +b.layer_level_db || -6)), out_dir: path.join(LISTENING, id) };
+    const tmp = path.join(JOBS_DIR, crypto.randomBytes(6).toString('hex') + '.json');
+    fs.writeFileSync(tmp, JSON.stringify(spec));
+    try { return send(res, 200, pub(startJob('listening', ['listening-run', tmp], { tmp, maxMs: LISTEN_MAX_MS, run: id, runs: sources.length * levels.length * seeds.length }))); }
+    catch (e) { fs.unlink(tmp, () => {}); throw e; }
+  }
+  if (m === 'GET' && p === '/api/listening') {
+    const out = [];
+    for (const id of fs.readdirSync(LISTENING)) {
+      try {
+        const r = JSON.parse(fs.readFileSync(path.join(LISTENING, id, 'report.json'), 'utf8'));
+        out.push({ id, name: r.name, created: r.created, status: r.status, levels: Object.keys(r.levels), seeds: r.seeds, sources: r.sources.map(s => s.label),
+          failed_checks: r.overall ? r.overall.failed_checks.length : null, rated: !!r.rating_summary });
+      } catch {}
+    }
+    return send(res, 200, out.sort((a, c) => (c.created || '').localeCompare(a.created || '')));
+  }
+  if ((g = p.match(/^\/api\/listening\/(\d{14}-[a-f0-9]{6})(?:\/(file|ratings))?$/))) {
+    const dir = path.join(LISTENING, g[1]);
+    if (!fs.existsSync(path.join(dir, 'report.json'))) return send(res, 404, { error: 'Listening pack not found.' });
+    if (!g[2] && m === 'GET') return send(res, 200, JSON.parse(fs.readFileSync(path.join(dir, 'report.json'), 'utf8')));   // key.json is never served
+    if (g[2] === 'file' && m === 'GET') {
+      const f = url.searchParams.get('path') || '';
+      if (!/^(ref\/s\d+|blind\/[A-Z]{2}\d{2}|lib\/[a-z0-9-]{6,40}(\.layers|\.source)?)\.wav$/.test(f)) return send(res, 400, { error: 'Bad file.' });
+      const full = path.join(dir, f);
+      if (!fs.existsSync(full)) return send(res, 404, { error: 'Not found.' });
+      return serveFile(req, res, full);
+    }
+    if (g[2] === 'ratings' && m === 'POST') {
+      const b = await readJson(req), ratings = {};
+      for (const [code, r] of Object.entries(b.ratings || {})) {
+        if (!/^[A-Z]{2}\d{2}$/.test(code)) continue;
+        const n = v => (Number.isInteger(+v) && +v >= 1 && +v <= 5 ? +v : null);
+        ratings[code] = { closeness: n(r.closeness), quality: n(r.quality), guess: ['low', 'medium', 'high', 'strict'].includes(r.guess) ? r.guess : null };
+      }
+      if (!Object.keys(ratings).length) return send(res, 400, { error: 'No ratings.' });
+      const tmp = path.join(JOBS_DIR, crypto.randomBytes(6).toString('hex') + '.json');
+      fs.writeFileSync(tmp, JSON.stringify(ratings));
+      try { return send(res, 200, (await engine(['listening-score', dir, tmp])).summary); }
+      finally { fs.unlink(tmp, () => {}); }
+    }
+    if (!g[2] && m === 'DELETE') {
+      if (active && jobs.get(active).status === 'running' && jobs.get(active).run === g[1]) return send(res, 409, { error: 'This pack is still running.' });
+      fs.rmSync(dir, { recursive: true, force: true }); return send(res, 200, { ok: true });
+    }
+  }
   send(res, 404, { error: 'Not found' });
 }
 
@@ -342,7 +422,7 @@ http.createServer(async (req, res) => {
       if (origin && new URL(origin).host !== req.headers.host) return send(res, 403, { error: 'Cross-origin request blocked.' });
       return await api(req, res, url);
     }
-    const name = url.pathname === '/' ? 'index.html' : ({ '/about': 'about.html', '/create': 'create.html', '/editor': 'editor.html', '/sample': 'sample.html' })[url.pathname] || url.pathname.slice(1);
+    const name = url.pathname === '/' ? 'index.html' : ({ '/about': 'about.html', '/create': 'create.html', '/editor': 'editor.html', '/sample': 'sample.html', '/listening': 'listening.html' })[url.pathname] || url.pathname.slice(1);
     if (!PUBLIC.has(name)) { res.writeHead(404); return res.end('Not found'); }
     res.writeHead(200, { 'Content-Type': TYPES[path.extname(name)] || 'application/octet-stream', 'Cache-Control': 'no-cache' });   // always revalidate: scripts and pages change between versions
     fs.createReadStream(path.join(ROOT, name)).pipe(res);

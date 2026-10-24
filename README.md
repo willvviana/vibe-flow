@@ -55,6 +55,7 @@ Each job runs in its own Python process: memory is fully released afterwards and
 | **Vocals / lyrics (ACE-Step 1.5 sft + LM)** | **Experimental, not integrated.** Objective check says it sings the lyrics; musical quality unverified; needs ~11.5 GB RAM. See docs/EVALUATION.md |
 | Editor (multi-track editing, DSP, export WAV/FLAC/MP3, send to Create) | **Implemented; 88 browser checks, Node tests**; DSP not judged by ear. No pitch correction. See docs/EDITOR.md |
 | Sample page (system audio capture, live transcript, Demucs stems, tags, library, use in Create) | **Implemented; real-model tests**; separation/tag quality not judged by ear. See docs/SAMPLE.md |
+| Listening Pack (adherence levels Low/Medium/High/Strict, measured comparisons, blind rating, lead/backing vocal split, tag recognition test) | **Implemented; measured on real audio** (results in docs/LISTENING.md); listening verdict pending your blind ratings |
 | GPU acceleration on AMD RX 5700 XT | **Unsupported** (no working backend) |
 
 Evaluation of musical coherence, vocal candidates, root causes and measurements: **docs/EVALUATION.md**. Listening pack: **samples/**.
@@ -64,6 +65,8 @@ Multi-instrument / multi-genre / multi-mood: every selection is always written i
 Mood handling: the shipped default still writes the mood *before* the genre ("a sad metal ..."), which can let the mood override the music. An experimental fix, `profile: "layered"` (or `VIBEFLOW_PROFILE=layered`), orders the prompt genre > instruments > tempo > mood > production and keeps mood a short tone layer. Unverified by listening; not the default. No mood-intensity control exists because MusicGen cannot weight conditioning (docs/EVALUATION.md, round 6).
 
 **Adapt a sample** (create page, tab "Adapt a sample"): upload a sample and choose Loose <-> Close (0-100 %). The percentage controls how many bars of the sample are kept as the untouched original, the tempo/key hints, alignment and audio conditioning of the generated layers (not a volume). Instrumental only; vocals are not available. Mechanically measured and tested; **musical quality not yet evaluated by listening** (docs/EVALUATION.md, round 7).
+
+**Listening Pack** (`/listening`): pick recordings (Full / Instrumental / Voice / Lead / Backing), Editor samples or an upload; it generates every adherence level (Low 15 %, Medium 50 %, High 75 %, Strict 100 %; also buttons on Create) for one or more seeds, measures tempo, rhythm, harmony, instrumentation, structure, vocals and artefacts against each sample, runs pass/fail checks, and gives you a blind pack to rate. See docs/LISTENING.md.
 
 **Editor** (`/editor`): multi-track browser audio editor with real DSP, live preview and export to WAV/FLAC/MP3, plus hand-off to Create as a sample. See docs/EDITOR.md for what is implemented, tested and not supported.
 

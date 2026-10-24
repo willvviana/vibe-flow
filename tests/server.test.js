@@ -26,7 +26,7 @@ function wav(seconds, sr = 32000) {            // minimal 16-bit mono PCM WAV wi
 }
 
 test.before(async () => {
-  srv = spawn(process.execPath, ['server.js'], { cwd: path.join(__dirname, '..'), env: { ...process.env, PORT, VIBEFLOW_LIBRARY: lib, VIBEFLOW_IDLE_S: '8', VIBEFLOW_SAMPLES: path.join(lib, 'samples') } });
+  srv = spawn(process.execPath, ['server.js'], { cwd: path.join(__dirname, '..'), env: { ...process.env, PORT, VIBEFLOW_LIBRARY: lib, VIBEFLOW_IDLE_S: '8', VIBEFLOW_SAMPLES: path.join(lib, 'samples'), VIBEFLOW_LISTENING: path.join(lib, 'listening'), VIBEFLOW_RECORDINGS: path.join(lib, 'rec') } });
   for (let i = 0; i < 50; i++) { try { await fetch(BASE + '/'); return; } catch { await new Promise(r => setTimeout(r, 200)); } }
   throw new Error('server did not start');
 });
@@ -122,7 +122,7 @@ test('library survives a server restart', { timeout: 300000 }, async () => {
   assert.equal(done.status, 'complete', done.error);
   srv.kill();
   await new Promise(r => setTimeout(r, 500));
-  srv = spawn(process.execPath, ['server.js'], { cwd: path.join(__dirname, '..'), env: { ...process.env, PORT, VIBEFLOW_LIBRARY: lib, VIBEFLOW_IDLE_S: '8', VIBEFLOW_SAMPLES: path.join(lib, 'samples') } });
+  srv = spawn(process.execPath, ['server.js'], { cwd: path.join(__dirname, '..'), env: { ...process.env, PORT, VIBEFLOW_LIBRARY: lib, VIBEFLOW_IDLE_S: '8', VIBEFLOW_SAMPLES: path.join(lib, 'samples'), VIBEFLOW_LISTENING: path.join(lib, 'listening'), VIBEFLOW_RECORDINGS: path.join(lib, 'rec') } });
   for (let i = 0; i < 50; i++) { try { await fetch(BASE + '/'); break; } catch { await new Promise(r => setTimeout(r, 200)); } }
   const list = (await j('/api/library')).d;
   assert.ok(list.some(t => t.id === done.track.id && t.seed === 2));
@@ -198,4 +198,35 @@ test('editor endpoints: FLAC encode, save to Your Songs, samples store and hand-
   for (const bad of ['/api/samples/..%2F..%2Fserver.js/audio', '/api/samples/ZZZZ/audio', '/api/samples/0123456789abcdef0/audio']) assert.ok([400, 404].includes((await fetch(BASE + bad)).status), bad);
   const evil = await fetch(BASE + '/api/samples?name=x', { method: 'POST', headers: { Origin: 'https://evil.example' }, body });
   assert.equal(evil.status, 403);
+});
+
+test('listening pack over HTTP: validation, real run at two levels, blind files, hidden key, ratings (real model)', { timeout: 900000 }, async () => {
+  assert.deepEqual((await j('/api/listening')).d, []);
+  assert.equal((await post('/api/listening/run', { sources: [] })).r.status, 400);
+  assert.equal((await post('/api/listening/run', { sources: [{ type: 'recording', id: '0123456789abcdef', version: 'full' }] })).r.status, 400);
+  assert.equal((await post('/api/listening/run', { sources: [{ type: 'upload', id: 'nope' }], levels: ['extreme'] })).r.status, 400);
+  const up = await j('/api/upload', { method: 'POST', headers: { 'x-filename': 'tone.wav' }, body: wav(8) });
+  const srcs = [{ type: 'upload', id: up.d.id, kind: 'instrumental' }];
+  assert.equal((await post('/api/listening/run', { sources: srcs })).r.status, 400, 'no instrument/genre/mood: rejected before any generation');
+  const { d: job } = await post('/api/listening/run', { name: 'T', sources: srcs, levels: ['low', 'strict'], seeds: [1], seconds: 8, instruments: ['piano'] });
+  assert.equal(job.kind, 'listening');
+  const done = await wait(job.id, 800000);
+  assert.equal(done.status, 'complete', done.error);
+  const list = (await j('/api/listening')).d;
+  assert.equal(list.length, 1); assert.equal(list[0].id, done.run);
+  const rep = (await j('/api/listening/' + done.run)).d;
+  assert.deepEqual(Object.keys(rep.levels), ['low', 'strict']);
+  const src = rep.sources[0], checks = Object.fromEntries(src.checks.map(c => [c.id, c.pass]));
+  assert.equal(checks['mechanism strict'], true); assert.equal(checks['mechanism low'], true); assert.equal(checks.integrity, true);
+  assert.ok(src.summary.strict.mix.adherence_index[0] > src.summary.low.mix.adherence_index[0]);
+  assert.equal(rep.blind.length, 2);
+  const f = await fetch(`${BASE}/api/listening/${done.run}/file?path=blind/${rep.blind[0].code}.wav`);
+  assert.equal(f.status, 200); assert.equal(f.headers.get('content-type'), 'audio/wav');
+  for (const bad of ['key.json', '../report.json', 'lib/../key.json']) assert.equal((await fetch(`${BASE}/api/listening/${done.run}/file?path=${encodeURIComponent(bad)}`)).status, 400);
+  assert.ok(!JSON.stringify(rep).includes('"level":"low","seed":1,"track"'), 'the blind key is not in the report');
+  const ratings = Object.fromEntries(rep.blind.map((b, i) => [b.code, { closeness: i + 1, quality: 3 }]));
+  const sc = await post(`/api/listening/${done.run}/ratings`, { ratings });
+  assert.equal(sc.r.status, 200); assert.equal(Object.values(sc.d.per_level).reduce((a, v) => a + v.n, 0), 2);
+  assert.equal((await j(`/api/listening/${done.run}`, { method: 'DELETE' })).r.status, 200);
+  assert.deepEqual((await j('/api/listening')).d, []);
 });

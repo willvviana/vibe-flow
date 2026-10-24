@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Listening Pack – Vibe Flow Adherence Testing</title>
+  <meta name="description" content="Generate music from your samples at every adherence level (Low, Medium, High, Strict), measure how closely each result follows the sample, and rate them blind.">
+  <meta name="theme-color" content="#0b0b14">
+  <meta name="color-scheme" content="dark">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="manifest" href="site.webmanifest">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Inter:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="sample.css">
+  <link rel="stylesheet" href="listening.css">
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8b5cf6"/><stop offset="1" stop-color="#22d3ee"/></linearGradient></defs><symbol id="logo" viewBox="0 0 32 32"><rect width="32" height="32" rx="9" fill="url(#lg)"/><g fill="#0b0b14"><rect x="6" y="13" width="3" height="6" rx="1.5"/><rect x="11" y="8" width="3" height="16" rx="1.5"/><rect x="16" y="11" width="3" height="10" rx="1.5"/><rect x="21" y="6" width="3" height="20" rx="1.5"/></g></symbol></svg>
+  <a class="skip" href="#main">Skip to content</a>
+
+  <header class="nav" id="top">
+    <div class="wrap nav-in">
+      <a class="brand" href="/" aria-label="Vibe Flow home"><svg width="30" height="30" viewBox="0 0 32 32" aria-hidden="true"><use href="#logo"/></svg><span>Vibe Flow</span></a>
+      <nav class="links" id="menu" aria-label="Primary">
+        <a href="create.html">Create</a>
+        <a href="sample.html">Sample</a>
+        <a href="editor.html">Editor</a>
+        <a href="listening.html" aria-current="page">Listening</a>
+        <div class="dd">
+          <a class="dd-t" href="/about" aria-haspopup="true">About</a>
+          <ul class="dd-m" aria-label="About sections">
+            <li><a href="/about#how">How it works</a></li><li><a href="/about#benefits">Benefits</a></li><li><a href="/about#use-cases">Use cases</a></li>
+            <li><a href="/about#showcase">Showcase</a></li><li><a href="/about#pricing">Pricing</a></li><li><a href="/about#faq">FAQ</a></li>
+          </ul>
+        </div>
+        <a class="btn btn-primary menu-cta" href="create.html">Create music</a>
+      </nav>
+      <a class="btn btn-primary nav-cta" href="create.html">Create music</a>
+      <button class="burger" aria-label="Toggle menu" aria-expanded="false" aria-controls="menu"><span></span><span></span></button>
+    </div>
+  </header>
+
+  <main id="main" class="sp">
+    <div class="wrap">
+      <h1>Listening <span class="grad">Pack</span></h1>
+      <p class="lead">Generate from your samples at every adherence level, measure how closely each result follows its sample, then rate the results blind. All numbers come from the generated audio itself; they are measurements, not a verdict on how it sounds.</p>
+
+      <section class="spc" aria-labelledby="new-h">
+        <div class="rec-head"><h2 id="new-h">New pack</h2><span class="muted" id="est"></span></div>
+        <div class="lp-grid">
+          <fieldset class="lp-fs"><legend>Samples <small class="muted">(up to 6)</small></legend>
+            <div id="src-list" class="src-list"><p class="muted">Loading…</p></div>
+            <div class="row">
+              <label class="btn btn-ghost sm" for="up-file">Upload a file…</label><input type="file" id="up-file" accept=".wav,.flac,.mp3,.ogg" hidden>
+              <select id="up-kind" class="sel" aria-label="What the uploaded file contains"><option value="full">Full mix</option><option value="instrumental">Instrumental only</option><option value="vocals">Vocals only</option></select>
+            </div>
+          </fieldset>
+          <fieldset class="lp-fs"><legend>Settings</legend>
+            <div class="lp-levels" id="levels">
+              <label><input type="checkbox" value="low" checked> Low <small>15 %</small></label>
+              <label><input type="checkbox" value="medium" checked> Medium <small>50 %</small></label>
+              <label><input type="checkbox" value="high" checked> High <small>75 %</small></label>
+              <label><input type="checkbox" value="strict" checked> Strict <small>100 %</small></label>
+            </div>
+            <label class="lp-f">Seeds <input class="inp" id="seeds" value="5, 6" aria-describedby="seeds-n"></label>
+            <p class="note" id="seeds-n">Two or more seeds measure how consistent each level is.</p>
+            <label class="lp-f">Instruments for the new layers <input class="inp" id="instr" value="piano, strings"></label>
+            <label class="lp-f">Genres <input class="inp" id="genres" placeholder="optional, e.g. pop, folk"></label>
+            <label class="lp-f">Sample window <output id="secs-o">20 s</output><input type="range" id="secs" min="8" max="30" value="20"></label>
+            <label class="lp-f">Pack name <input class="inp" id="pname" value="Listening pack"></label>
+          </fieldset>
+        </div>
+        <div class="row"><button class="btn btn-primary" id="go">Build listening pack →</button><button class="btn btn-ghost" id="cancel" hidden>Cancel</button></div>
+        <div class="proc" id="prog" hidden><div class="proc-h"><span id="prog-msg">Starting…</span><span id="prog-pct" class="muted"></span></div><div class="lp-bar"><i id="prog-bar"></i></div></div>
+      </section>
+
+      <section aria-labelledby="packs-h">
+        <div class="rec-head"><h2 id="packs-h">Packs</h2></div>
+        <div id="packs" class="lp-packs"><p class="muted">Loading…</p></div>
+      </section>
+
+      <section id="pack" class="spc" hidden aria-live="polite"></section>
+    </div>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+  <script src="script.js" defer></script>
+  <script src="listening/app.js" defer></script>
+</body>
+</html>

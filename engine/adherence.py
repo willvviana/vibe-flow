@@ -16,6 +16,25 @@ Anchor behaviour (see table()):  0-10 % new music, tempo only; 25 % + key & groo
 Deliberately simple, monotone and smooth, so "intermediate settings behave predictably"."""
 
 
+# Named levels (UI buttons, API `adherence_level`). Each is a fixed point on the 0-100 scale, chosen so neighbouring levels differ in
+# a mechanism, not just a number:  low = tempo hint only, nothing kept, no audio conditioning;  medium = audio-conditioned, key + tempo
+# hints, ~1/3 of bars kept;  high = ~2/3 kept, strong alignment;  strict = every bar of the sample kept untouched, layers added under it.
+LEVELS = {"low": 15.0, "medium": 50.0, "high": 75.0, "strict": 100.0}
+
+
+def level_value(name):
+    """'Low'/'medium'/... -> percentage. Raises KeyError for an unknown name."""
+    return LEVELS[str(name).strip().lower()]
+
+
+def level_name(p):
+    """The named level whose percentage equals p (None for in-between slider values)."""
+    for k, v in LEVELS.items():
+        if abs(float(p) - v) < 1e-9:
+            return k
+    return None
+
+
 def _clip(x, lo=0.0, hi=1.0):
     return max(lo, min(hi, x))
 

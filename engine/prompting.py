@@ -31,6 +31,13 @@ def _list(v, label):
     return out
 
 
+def _adh_name(p):
+    if p is None:
+        return None
+    from . import adherence
+    return adherence.level_name(p)
+
+
 def validate(s: dict, max_duration: int = 60) -> dict:
     """Return a clean settings dict or raise ValidationError."""
     prompt = str(s.get("prompt") or "").strip()
@@ -102,6 +109,13 @@ def validate(s: dict, max_duration: int = 60) -> dict:
     if not 10 <= top_k <= 500:
         raise ValidationError("top_k must be between 10 and 500.")
     adh = s.get("adherence")
+    adh_level = s.get("adherence_level") or None
+    if mode == "adapt" and adh_level is not None:          # a named level wins over a raw percentage
+        from . import adherence
+        try:
+            adh = adherence.level_value(adh_level)
+        except KeyError:
+            raise ValidationError(f"adherence_level must be one of: {', '.join(adherence.LEVELS)}.")
     if mode == "adapt":
         if adh in (None, ""):
             raise ValidationError("Adapt mode needs an adherence value between 0 (loose) and 100 (close to the sample).")
@@ -120,7 +134,7 @@ def validate(s: dict, max_duration: int = 60) -> dict:
     if not -24 <= level <= 0:
         raise ValidationError("Layer level must be between -24 and 0 dB.")
     return {
-        "adherence": adh, "layer_level_db": level,
+        "adherence": adh, "adherence_level": _adh_name(adh), "layer_level_db": level, "tempo_retry": bool(s.get("tempo_retry")),
         "prompt": prompt,
         "genres": _list(s.get("genres"), "genres"),
         "instruments": _list(s.get("instruments"), "instruments"),

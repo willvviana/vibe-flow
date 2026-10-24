@@ -9,7 +9,10 @@ Pipeline (each step is a separate function so it can be tested without the model
                                           continue in the sample's own tempo/key/timbre. No vocals ever: instrumental engine.
   5 align + harmonise + carve             tempo (phase vocoder, <= +-10 %), downbeat phase (onset cross-correlation), key (pitch shift <= 4 semitones),
                                           spectral carving where the sample is strong. Strengths come from the plan. Skipped when not needed.
-  6 mix                                   output = sample * retained-bar mask  +  layers * gain(user level under retained bars, 0 dB elsewhere).
+  6 mix                                   layers loudness-matched to the sample (<= +-12 dB), then
+                                          output = sample * retained-bar mask  +  layers * gain(user level under retained bars, 0 dB elsewhere).
+                                          Opt-in (settings.tempo_retry): if the layers miss the sample's tempo by > 4 BPM (octaves folded)
+                                          steps 4-6 run once more with a derived seed; the closer take is kept (evaluation.tempo_retry).
                                           The sample is COPIED, never regenerated or filtered; at 100 % the whole sample is present.
   7 evaluate                              clipping, tempo error, key match, rhythmic duplication (onset-envelope correlation), source integrity
                                           (exact residual), spectral overlap before/after carving. Returned in the metadata.
@@ -136,6 +139,29 @@ def evaluate(src_mono, layer_final, mix, sr, a_src, source_part, layer_part, car
             "spectral_overlap_before_carve": round(carve[0], 4), "spectral_overlap_after_carve": round(carve[1], 4), "alignment": align}
 
 
+MATCH_LIMIT_DB = 12.0       # loudness match of the new layers to the sample, at most +-12 dB
+TEMPO_RETRY_BPM = 4.0       # regenerate once (derived seed) when the new layers miss the sample's tempo by more than this (octaves folded)
+
+
+def _active_rms(x, sr, floor_db=-50.0):
+    """RMS over the 50 ms frames that are not near-silent (so a silent context lead-in does not count)."""
+    w = max(1, int(0.05 * sr))
+    f = x[: len(x) // w * w].reshape(-1, w) if len(x) >= w else x[None]
+    r = np.sqrt((f ** 2).mean(axis=1))
+    act = r > 10 ** (floor_db / 20)
+    return float(np.sqrt((r[act] ** 2).mean())) if act.any() else 0.0
+
+
+def match_level(layer, src_mono, sr):
+    """Scale the generated layers to the sample's loudness, so 'Added layers level' is relative to the sample and a quiet model take
+    does not come out 15 dB under its reference (measured: Listening Pack, seed-dependent MusicGen output level). Returns (layer, dB)."""
+    ls, ss = _active_rms(layer, sr), _active_rms(src_mono, sr)
+    if ls <= 0 or ss <= 0:
+        return layer, 0.0
+    db = float(np.clip(20 * math.log10(ss / ls), -MATCH_LIMIT_DB, MATCH_LIMIT_DB))
+    return (layer * 10 ** (db / 20)).astype(np.float32), round(db, 2)
+
+
 def mix_down(x_src, layer, sr, a_src, retained, level_db, p):
     """Sample copy under the retained-bar mask + layers. x_src [n, ch], layer [n] at the same sr. Returns (mix, source_part, layer_part, gain)."""
     n = x_src.shape[0]
@@ -148,18 +174,25 @@ def mix_down(x_src, layer, sr, a_src, retained, level_db, p):
     source_part = x_src * mask[:, None]
     layer_part = (layer[:n] * gain)[:, None] * np.ones((1, x_src.shape[1]), dtype=np.float32)
     mix = source_part + layer_part
-    peak = float(np.abs(mix).max())
-    if peak > 0.99:                                                      # peak safety: reduce the layers first, then (if still needed) everything
-        lo = float(np.abs(source_part).max())
-        if lo < 0.99 and float(np.abs(layer_part).max()) > 0:
-            lp = float(np.abs(layer_part).max())
-            scale = min(1.0, max(0.0, (0.99 - lo) / lp))
-            layer_part = layer_part * scale
-            mix = source_part + layer_part
+    lim = {"limited_share": 0.0, "min_gain_db": 0.0}
+    if float(np.abs(mix).max()) > 0.99:
+        # peak safety on the LAYERS ONLY and only where the sum would clip: a smoothed gain envelope (10 ms attack/release).
+        # (It used to scale the whole layer by (0.99 - sample peak) / layer peak: one coincident peak on a near-full-scale sample made
+        # the entire take 7-13 dB quieter, measured in the Listening Pack.)
+        from scipy.ndimage import minimum_filter1d, uniform_filter1d
+        s_pk, l_pk = np.abs(source_part).max(axis=1), np.abs(layer_part).max(axis=1)
+        need = np.clip((0.99 - s_pk) / (l_pk + 1e-9), 0.0, 1.0)
+        w = max(1, int(0.01 * sr))
+        g = uniform_filter1d(minimum_filter1d(need, size=2 * w + 1), size=w)   # every averaged value is <= the need at the centre
+        g = np.minimum(g, need).astype(np.float32)
+        layer_part = layer_part * g[:, None]
+        mix = source_part + layer_part
+        lim = {"limited_share": round(float((g < 0.999).mean()), 4), "min_gain_db": round(20 * math.log10(float(g.min()) + 1e-9), 1)}
         peak = float(np.abs(mix).max())
-        if peak > 0.99:
+        if peak > 0.99:                                                  # only when the sample alone is above 0.99
             k = 0.99 / peak
             mix, source_part, layer_part = mix * k, source_part * k, layer_part * k
+    mix_down.last_limiter = lim
     return mix.astype(np.float32), source_part.astype(np.float32), layer_part.astype(np.float32), gain
 
 
@@ -202,9 +235,12 @@ def compose(x_src, sr_src, settings, generate_layer, emit=lambda **k: None):
     if plan["retain_fraction"] > 0:
         layer, b, af = dsp.spectral_carve(layer, src_m, sr_src, depth_db=plan["carve_depth_db"])
         carve = (b, af)
+    layer, match_db = match_level(layer, src_m, sr_src)
     emit(stage="mix", pct=90, message="Mixing…")
     mix, source_part, layer_part, gain = mix_down(x_src, layer, sr_src, a, retained, settings["layer_level_db"], p)
     ev = evaluate(src_m, layer, mix, sr_src, a, source_part, layer_part, carve, align)
+    ev["layer_level_match_db"] = match_db
+    ev["layer_peak_limiter"] = mix_down.last_limiter
     return {"mix": mix, "source": x_src, "layers": layer_part, "analysis": a, "plan": plan, "text_settings": text_settings, "evaluation": ev}
 
 
@@ -242,6 +278,20 @@ def run(job, emit=lambda **k: None, keep_loaded=False):
 
         t1 = time.time()
         res = compose(x_src, sr_src, c, gen_layer, emit)
+        ev0 = res["evaluation"]
+        # A continuation sometimes settles into a related but different pulse (measured: 104 BPM over a 78 BPM sample, a 4:3 ratio that
+        # the +-10 % aligner cannot fix). One deterministic retry with a derived seed; the take closer to the sample's tempo is kept.
+        # OPT-IN (settings.tempo_retry): in the Listening Pack it fixed 2 of 8 triggered takes and cost 28 % more time; most retries landed
+        # on the same 4:3 tempo again, which on that sample is an ambiguity of the sample itself (another estimator reads it at 106 BPM).
+        if c.get("tempo_retry") and res["plan"]["tempo_hint"] >= 0.5 and res["analysis"]["tempo_confidence"] > 0.1 and ev0["layer_tempo_error_bpm"] > TEMPO_RETRY_BPM:
+            seed2 = (seed * 7919 + 104729) % (1 << 24)
+            emit(stage="generate", pct=8, message=f"The new layers missed the sample's tempo by {ev0['layer_tempo_error_bpm']} BPM; generating once more…")
+            torch.manual_seed(seed2)
+            res2 = compose(x_src, sr_src, c, gen_layer, emit)
+            keep2 = res2["evaluation"]["layer_tempo_error_bpm"] < ev0["layer_tempo_error_bpm"]
+            res = res2 if keep2 else res
+            res["evaluation"]["tempo_retry"] = {"first_error_bpm": ev0["layer_tempo_error_bpm"], "retry_seed": seed2,
+                                                "retry_error_bpm": res2["evaluation"]["layer_tempo_error_bpm"], "kept": "retry" if keep2 else "first"}
         gen_s = time.time() - t1
     finally:
         del model, proc
@@ -252,6 +302,10 @@ def run(job, emit=lambda **k: None, keep_loaded=False):
     warnings += ["The new layers are mono and centred; the sample keeps its own sample rate and channels.",
                  "Melody/motifs are not analysed and vocals are not available (instrumental only)."]
     warnings += [f"Not applied: {s}" for s in ev["alignment"]["skipped"]]
+    tr = ev.get("tempo_retry")
+    if tr:
+        warnings.append(f"The first take missed the sample's tempo by {tr['first_error_bpm']} BPM; a second take (seed {tr['retry_seed']}) was generated "
+                        f"and the {'second' if tr['kept'] == 'retry' else 'first'} one was kept ({min(tr['first_error_bpm'], tr['retry_error_bpm'])} BPM off).")
     emit(stage="export", pct=94, message="Saving…")
     track_id = library.new_id()
     _, wav_path = library.paths(track_id)
@@ -268,6 +322,7 @@ def run(job, emit=lambda **k: None, keep_loaded=False):
         "settings": {k: v for k, v in c.items() if k != "reference"},
         "model_prompt": plan.get("prompt"), "vocals": False,
         "model": {"id": spec.id, "name": spec.name, "repo": spec.repo, "license": spec.license}, "device": device, "seed": seed,
+        "seed_used": tr["retry_seed"] if tr and tr["kept"] == "retry" else seed,
         "reference": {**info, "name": job.get("reference_name") or os.path.basename(c["reference"]), "workflow": "adapt"},
         "analysis": a, "plan": plan, "evaluation": ev,
         "audio": {**check, "analysis": stats, "files": {"wav": track_id + ".wav", "source": track_id + ".source.wav", "layers": track_id + ".layers.wav"}},
